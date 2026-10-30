@@ -15,7 +15,8 @@ curl -fsSL https://raw.githubusercontent.com/vilcht/fs-bench/main/run.sh | bash
 ```
 
 - **macOS:** APFS, run twice: once as-is, once in a directory Spotlight skips (`*.noindex`). Needs git
-  (`xcode-select --install`).
+  (`xcode-select --install`). Two Macs with the same chip get the same automatic label, so name them:
+  `curl … | LABEL=macbook bash`.
 - **Linux:** your home filesystem, then ext4, xfs and btrfs test volumes (image files on the same disk).
   Asks for sudo to mount them.
 - **Windows:** install [Git for Windows](https://git-scm.com/download/win), open **Git Bash**, and run the same

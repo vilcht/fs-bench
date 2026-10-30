@@ -1,0 +1,57 @@
+{
+  "_comment": "Maps benchmark labels to machines on the slides. Run the Macs with LABEL=macbook / LABEL=macmini so the two don't collide. 'expected' lists the configs the deck needs; any without real results get mock data, flagged on every slide that shows them.",
+  "machines": [
+    {
+      "key": "macbook",
+      "name": "MacBook",
+      "detail": "Apple M? · ? GB",
+      "labels": ["macbook"]
+    },
+    {
+      "key": "macmini",
+      "name": "Mac mini",
+      "detail": "Apple M? · ? GB",
+      "labels": ["macmini"]
+    },
+    {
+      "key": "desktop",
+      "name": "Desktop",
+      "detail": "Ryzen 5 5600X · Kingston KC3000",
+      "labels": ["amd-ryzen-5-5600x-linux", "desktop-5600x"]
+    },
+    {
+      "key": "desktop-win",
+      "name": "Desktop (Windows)",
+      "detail": "Ryzen 5 5600X · WD SN850X",
+      "labels": ["amd-ryzen-5-5600x-windows"]
+    },
+    {
+      "key": "desktop-wsl",
+      "name": "Desktop (WSL2)",
+      "detail": "Ryzen 5 5600X · WD SN850X",
+      "labels": ["amd-ryzen-5-5600x-wsl"]
+    },
+    {
+      "key": "huawei",
+      "name": "Huawei laptop",
+      "detail": "Core Ultra 5 125H",
+      "labels": ["intel-core-ultra-5-125h-linux"]
+    }
+  ],
+  "expected": [
+    "macbook:apfs",
+    "macbook:apfs-noindex",
+    "macmini:apfs",
+    "macmini:apfs-noindex",
+    "desktop:home-btrfs",
+    "desktop:ext4",
+    "desktop:xfs",
+    "desktop:btrfs",
+    "huawei:home-ext4",
+    "huawei:ext4",
+    "huawei:btrfs",
+    "desktop-win:ntfs",
+    "desktop-win:devdrive",
+    "desktop-wsl:home-ext4"
+  ]
+}
