@@ -10,7 +10,7 @@ action=${1:?up|down}
 fs=${2:?ext4|xfs|btrfs}
 size=${3:-48G}
 owner=${SUDO_USER:-$(id -un)}
-img_dir=${IMG_DIR:-$(getent passwd "$owner" | cut -d: -f6)/fs-bench-data/img}
+img_dir=${IMG_DIR:-$(getent passwd "$owner" | cut -d: -f6)/fsbench-data/img}
 img=$img_dir/$fs.img
 mnt=/mnt/fsbench-$fs
 

@@ -3,3 +3,4 @@ results/*/logs/
 __pycache__/
 results-overlapped/
 results/summary.json
+.tools/
