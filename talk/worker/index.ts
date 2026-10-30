@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers'
 import { POLLS, poll, score } from '../shared/polls'
-import type { ClientMessage, Me, PollStatus, PollView, Role, RoomState, ServerMessage } from '../shared/protocol'
+import type { ClientMessage, Cursor, Me, PollStatus, PollView, Role, RoomState, ServerMessage } from '../shared/protocol'
 
 interface Env {
   ROOM: DurableObjectNamespace<Room>
@@ -27,7 +27,7 @@ interface Stored {
   slide: number
   step: number
   polls: Record<string, PollStatus>
-  players: Record<string, { name: string }>
+  players: Record<string, { name: string; cursor?: string }>
   votes: Record<string, Record<string, string | number>>
 }
 
@@ -38,8 +38,14 @@ interface Attachment {
 
 const initial = (): Stored => ({ slide: 0, step: 0, polls: {}, players: {}, votes: {} })
 
+/** Cursor broadcasts are batched: at most one per this many ms, whoever moved. */
+const CURSOR_FLUSH_MS = 100
+
 export class Room extends DurableObject<Env> {
   private s: Stored = initial()
+  // Live pointers are ephemeral: memory only, never persisted.
+  private cursors = new Map<string, { x: number; y: number; at: number }>()
+  private cursorTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
@@ -69,6 +75,10 @@ export class Room extends DurableObject<Env> {
     } catch {
       return
     }
+    if (msg.t === 'cursor') {
+      this.moveCursor(att, msg.x, msg.y)
+      return
+    }
     const error = this.apply(att, msg)
     if (error) {
       ws.send(JSON.stringify({ t: 'error', message: error } satisfies ServerMessage))
@@ -79,7 +89,44 @@ export class Room extends DurableObject<Env> {
   }
 
   async webSocketClose(ws: WebSocket, code: number) {
+    const att = ws.deserializeAttachment() as Attachment
+    if (att.role === 'audience' && this.cursors.delete(att.id)) this.scheduleCursors()
     ws.close(code)
+  }
+
+  private moveCursor(att: Attachment, x: number, y: number) {
+    if (att.role !== 'audience' || !this.s.players[att.id]) return
+    if (!(x >= 0 && x <= 1 && y >= 0 && y <= 1)) {
+      if (this.cursors.delete(att.id)) this.scheduleCursors()
+      return
+    }
+    this.cursors.set(att.id, { x, y, at: Date.now() })
+    this.scheduleCursors()
+  }
+
+  private scheduleCursors() {
+    if (this.cursorTimer) return
+    this.cursorTimer = setTimeout(() => {
+      this.cursorTimer = null
+      const stale = Date.now() - 60_000
+      const cursors: Cursor[] = []
+      for (const [id, c] of this.cursors) {
+        const player = this.s.players[id]
+        if (c.at < stale || !player?.cursor) {
+          this.cursors.delete(id)
+          continue
+        }
+        cursors.push({ id: player.cursor, name: player.name, x: c.x, y: c.y })
+      }
+      const msg = JSON.stringify({ t: 'cursors', cursors } satisfies ServerMessage)
+      for (const ws of this.ctx.getWebSockets()) {
+        try {
+          ws.send(msg)
+        } catch {
+          // socket already closing
+        }
+      }
+    }, CURSOR_FLUSH_MS)
   }
 
   private apply(att: Attachment, msg: ClientMessage): string | undefined {
@@ -87,7 +134,7 @@ export class Room extends DurableObject<Env> {
     if (msg.t === 'join') {
       const name = String(msg.name).trim().slice(0, 24)
       if (!name) return 'Pick a name'
-      s.players[att.id] = { name }
+      s.players[att.id] = { name, cursor: s.players[att.id]?.cursor ?? crypto.randomUUID().slice(0, 8) }
       return
     }
     if (msg.t === 'vote') {
@@ -104,6 +151,8 @@ export class Room extends DurableObject<Env> {
     if (att.role !== 'presenter') return 'Presenter only'
     if (msg.t === 'reset') {
       this.s = initial()
+      this.cursors.clear()
+      this.scheduleCursors()
       return
     }
     if (msg.t === 'goto') {
@@ -159,6 +208,7 @@ export class Room extends DurableObject<Env> {
       const rankIndex = sc.ranked.findIndex(([id]) => id === att.id)
       const me: Me = {
         id: att.id,
+        cursorId: this.s.players[att.id]?.cursor ?? null,
         name: this.s.players[att.id]?.name ?? null,
         score: sc.totals[att.id] ?? 0,
         rank: rankIndex >= 0 ? rankIndex + 1 : null,

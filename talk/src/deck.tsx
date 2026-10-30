@@ -99,7 +99,7 @@ export const SLIDES: SlideDef[] = [
             {Array.from({ length: 16 }, (_, a) => (
               <div className="tower" key={a}>
                 {Array.from({ length: 65 }, (_, k) => (
-                  <i key={k} className={k >= 53 ? 'checkout cell-write' : 'cell-write'} style={{ animationDelay: `${a * 45 + (64 - k) * 6}ms` }} />
+                  <i key={k} className={k >= 53 ? 'checkout' : undefined} />
                 ))}
               </div>
             ))}
@@ -161,7 +161,7 @@ export const SLIDES: SlideDef[] = [
       const p = poll('one-agent') as ChoicePoll
       return (
         <PollSlide p={p} ctx={ctx}>
-          <Bars items={choiceBars(p, 1)} width={W - 420} format={fmtSeconds} labelWidth={330} write />
+          <Bars items={choiceBars(p, 1)} width={W - 420} format={fmtSeconds} labelWidth={330} />
         </PollSlide>
       )
     },
@@ -233,11 +233,11 @@ export const SLIDES: SlideDef[] = [
         <div className="two-col">
           <div>
             <h3 className="chart-title">16 agents: checkout + install</h3>
-            <Bars items={LINUX_FS.map((id) => fsBar(cfg(id), setupTime(cfg(id), 16)))} width={680} labelWidth={110} format={fmtSeconds} write />
+            <Bars items={LINUX_FS.map((id) => fsBar(cfg(id), setupTime(cfg(id), 16)))} width={680} labelWidth={110} format={fmtSeconds} />
           </div>
           <div>
             <h3 className="chart-title">16 agents: delete worktrees</h3>
-            <Bars items={LINUX_FS.map((id) => fsBar(cfg(id), phaseTime(cfg(id), 'remove', 16)))} width={680} labelWidth={110} format={fmtSeconds} write />
+            <Bars items={LINUX_FS.map((id) => fsBar(cfg(id), phaseTime(cfg(id), 'remove', 16)))} width={680} labelWidth={110} format={fmtSeconds} />
           </div>
         </div>
         <p className="footnote">btrfs is copy-on-write, like APFS.</p>
@@ -295,7 +295,6 @@ export const SLIDES: SlideDef[] = [
               width={W - 420}
               labelWidth={300}
               format={fmtSeconds}
-              write
             />
           )}
         </PollSlide>
@@ -433,7 +432,7 @@ export const SLIDES: SlideDef[] = [
     notes: 'Repo link; it runs on macOS, Linux, Windows and WSL with one command.',
     render: () => (
       <div className="slide thanks">
-        <BlockText text={'RUN IT\nYOURSELF'} cell={22} write />
+        <BlockText text={'RUN IT\nYOURSELF'} cell={22} />
         <pre className="terminal one-liner">curl -fsSL https://raw.githubusercontent.com/vilcht/fs-bench/main/run.sh | bash</pre>
         <p className="lead">{REPO_URL}</p>
       </div>
@@ -470,7 +469,7 @@ function VoteCells({ votes }: { votes: number }) {
   return (
     <span className="vote-cells" aria-label={`${votes} votes`}>
       {Array.from({ length: Math.min(votes, 40) }, (_, i) => (
-        <i key={i} className="cell-write" />
+        <i key={i} className="fade-in" />
       ))}
       <span className="vote-count">{votes}</span>
     </span>
@@ -493,7 +492,7 @@ function PollSlide({ p, ctx, children }: { p: ChoicePoll | NumberPoll; ctx: Slid
       {p.kind === 'choice' && !revealed ? (
         <OptionGrid p={p} />
       ) : (
-        <div className="poll-body">
+        <div className="poll-body fade-in" key={ctx.step}>
           <div className="poll-main">{children}</div>
           <div className="poll-side">
             {p.kind === 'choice' ? (
@@ -501,7 +500,7 @@ function PollSlide({ p, ctx, children }: { p: ChoicePoll | NumberPoll; ctx: Slid
             ) : revealed ? (
               <div className="answer">
                 <span className="answer-label">Answer</span>
-                <BlockText text={p.unit === 's' ? fmtSeconds(p.answer).replace(' ', '') : fmtTimes(p.answer)} cell={13} write />
+                <BlockText text={p.unit === 's' ? fmtSeconds(p.answer).replace(' ', '') : fmtTimes(p.answer)} cell={13} />
               </div>
             ) : (
               <div className="vote-cta">Guess on your device</div>
@@ -510,6 +509,7 @@ function PollSlide({ p, ctx, children }: { p: ChoicePoll | NumberPoll; ctx: Slid
         </div>
       )}
       {revealed && p.kind === 'number' && (
+        <div className="fade-in">
         <Guesses
           guesses={view?.guesses ?? []}
           answer={p.answer}
@@ -518,6 +518,7 @@ function PollSlide({ p, ctx, children }: { p: ChoicePoll | NumberPoll; ctx: Slid
           width={W}
           format={(v) => (p.unit === 's' ? `${+v.toPrecision(2)} s` : `${+v.toPrecision(2)}×`)}
         />
+        </div>
       )}
     </div>
   )
@@ -575,7 +576,7 @@ function Leaderboard({ state }: { state: RoomState | null }) {
   const [first, ...rest] = board
   return (
     <div className="slide leaderboard">
-      <BlockText text="WINNER" cell={20} write />
+      <BlockText text="WINNER" cell={20} />
       {first ? (
         <>
           <div className="winner">

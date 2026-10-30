@@ -16,7 +16,7 @@ const VALUE_W = 200
 
 /**
  * Horizontal bars built from sectors: one run of square cells per item, length rounded to the
- * nearest cell (the exact value is printed at the tip). With `write`, cells land left to right.
+ * nearest cell (the exact value is printed at the tip).
  */
 export function Bars({
   items,
@@ -24,14 +24,12 @@ export function Bars({
   format,
   max,
   labelWidth = 400,
-  write = false,
 }: {
   items: BarItem[]
   width: number
   format: (v: number) => string
   max?: number
   labelWidth?: number
-  write?: boolean
 }) {
   const top = max ?? Math.max(...items.map((i) => i.value))
   const maxCells = Math.floor((width - labelWidth - VALUE_W) / PITCH)
@@ -61,8 +59,6 @@ export function Bars({
                 width={CELL}
                 height={CELL}
                 fill={item.color}
-                className={write ? 'cell-write' : undefined}
-                style={write ? { animationDelay: `${c * 14 + i * 90}ms` } : undefined}
               />
             ))}
             <text x={tip} y={y + CELL / 2} dominantBaseline="middle" className="chart-value">

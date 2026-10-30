@@ -35,13 +35,9 @@ code, pre { font-family: var(--mono); }
 .dot.ok { background: var(--good); }
 .dot.bad { background: var(--critical); animation: blink 1s steps(2, jump-none) infinite; }
 
-/* A sector being written: flashes white, then settles into its own color. */
-@keyframes write {
-  0% { opacity: 0; }
-  35% { opacity: 1; fill: var(--ink); background: var(--ink); }
-  100% { opacity: 1; }
-}
-.cell-write { animation: write 300ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+@keyframes fade { from { opacity: 0; } }
+.fade-in, .slide-fade { animation: fade 280ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+.slide-fade { position: absolute; inset: 0; }
 @keyframes blink { 50% { opacity: 0.25; } }
 
 /* stage + frame */
@@ -56,7 +52,6 @@ code, pre { font-family: var(--mono); }
 }
 .frame.bleed { background: var(--void); }
 .sector-field { position: absolute; inset: 0; width: 1600px; height: 900px; }
-.sector-wipe { position: absolute; inset: 0; width: 1600px; height: 900px; pointer-events: none; }
 
 .rail {
   position: absolute;
@@ -301,5 +296,25 @@ input[type='range'] { width: 100%; accent-color: var(--ink); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cell-write, .rail-progress i.now, .dot.bad { animation: none; }
+  .fade-in, .slide-fade, .rail-progress i.now, .dot.bad { animation: none; }
+}
+
+/* live cursors */
+.cursors { position: absolute; inset: 0; pointer-events: none; z-index: 3; overflow: hidden; }
+.cursor { position: absolute; left: 0; top: 0; transition: transform 110ms linear; will-change: transform; }
+.cursor svg { display: block; }
+.cursor-name {
+  position: absolute;
+  left: 16px;
+  top: 28px;
+  padding: 3px 7px;
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--void);
+  white-space: nowrap;
+}
+.cursor-name.flip { left: auto; right: 8px; }
+@media (prefers-reduced-motion: reduce) {
+  .cursor { transition: none; }
 }

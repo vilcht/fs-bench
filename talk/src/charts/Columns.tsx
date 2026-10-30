@@ -55,8 +55,6 @@ export function Columns({
                         width={CELL}
                         height={CELL}
                         fill={color}
-                        className="cell-write"
-                        style={{ animationDelay: `${r * 22 + i * 60}ms` }}
                       />
                     )
                   })}

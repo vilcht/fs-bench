@@ -1,7 +1,7 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { type NumberPoll, type Poll, poll } from '../shared/polls'
-import type { ClientMessage, Me, PollView } from '../shared/protocol'
-import { SectorWipe } from './blocks/SectorWipe'
+import type { ClientMessage, Cursor, Me, PollView } from '../shared/protocol'
+import { Cursors, useCursorReporter } from './Cursors'
 import { SLIDES, type SlideCtx, type SlideDef, slideHasMock } from './deck'
 import { Stage } from './Stage'
 import { fmtSeconds, fmtTimes } from './theme'
@@ -16,13 +16,27 @@ export function App() {
 
 const joinUrl = () => location.origin
 
-/** Slide plus its chrome: sector-grid backdrop, status rail, transition, mock badge. */
-function SlideFrame({ index, ctx, connected }: { index: number; ctx: SlideCtx; connected: boolean }) {
+/** Slide plus its chrome: sector-grid backdrop, status rail, fade between slides, mock badge. */
+function SlideFrame({
+  index,
+  ctx,
+  connected,
+  cursors,
+  self,
+}: {
+  index: number
+  ctx: SlideCtx
+  connected: boolean
+  cursors?: Cursor[]
+  self?: string | null
+}) {
   const slide: SlideDef = SLIDES[index]
   const view = slide.poll ? ctx.state?.polls[slide.poll] : undefined
   return (
     <div className={slide.bleed ? 'frame bleed' : 'frame'}>
-      {slide.render(ctx)}
+      <div className="slide-fade" key={index}>
+        {slide.render(ctx)}
+      </div>
       {slideHasMock(slide) && <div className="mock-badge">Mock data</div>}
       <footer className="rail">
         <span className="rail-progress" aria-label={`Slide ${index + 1} of ${SLIDES.length}`}>
@@ -37,7 +51,7 @@ function SlideFrame({ index, ctx, connected }: { index: number; ctx: SlideCtx; c
           <span className={`dot ${connected ? 'ok' : 'bad'}`} />
         </span>
       </footer>
-      <SectorWipe trigger={String(index)} />
+      {cursors && <Cursors cursors={cursors} exclude={self} />}
     </div>
   )
 }
@@ -62,7 +76,7 @@ function clampSlide(i: number) {
 
 function Presenter() {
   const key = usePresenterKey()
-  const { state, connected, send } = useRoom('presenter', { key })
+  const { state, cursors, connected, send } = useRoom('presenter', { key })
   const [pos, setPos] = useState<{ slide: number; step: number } | null>(null)
 
   useEffect(() => {
@@ -113,7 +127,7 @@ function Presenter() {
   return (
     <div className="presenter">
       <Stage>
-        <SlideFrame index={pos.slide} ctx={{ step: pos.step, state, joinUrl: joinUrl() }} connected={connected} />
+        <SlideFrame index={pos.slide} ctx={{ step: pos.step, state, joinUrl: joinUrl() }} connected={connected} cursors={cursors} />
       </Stage>
     </div>
   )
@@ -175,7 +189,9 @@ function playerId() {
 
 function Audience() {
   const id = useMemo(playerId, [])
-  const { state, connected, error, send } = useRoom('audience', { id })
+  const { state, cursors, connected, error, send } = useRoom('audience', { id })
+  const slideArea = useRef<HTMLDivElement>(null)
+  const pointer = useCursorReporter(slideArea, send)
   if (!state) return <Centered>{connected ? 'Loading…' : 'Connecting…'}</Centered>
   const me = state.me
   if (!me?.name) return <JoinForm onJoin={(name) => send({ t: 'join', name })} error={error} />
@@ -190,9 +206,15 @@ function Audience() {
           <span className={`dot ${connected ? 'ok' : 'bad'}`} />
         </span>
       </header>
-      <div className="audience-slide">
+      <div className="audience-slide" ref={slideArea} {...pointer}>
         <Stage>
-          <SlideFrame index={clampSlide(state.slide)} ctx={{ step: state.step, state, joinUrl: joinUrl() }} connected={connected} />
+          <SlideFrame
+            index={clampSlide(state.slide)}
+            ctx={{ step: state.step, state, joinUrl: joinUrl() }}
+            connected={connected}
+            cursors={cursors}
+            self={me.cursorId}
+          />
         </Stage>
       </div>
       <div className="vote-panel">

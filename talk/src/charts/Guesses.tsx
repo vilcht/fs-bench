@@ -48,7 +48,7 @@ export function Guesses({
         </text>
       ))}
       {cells.map((c, i) => (
-        <rect key={i} x={c.x} y={Math.max(24, c.y)} width={CELL} height={CELL} fill={INK.secondary} className="cell-write" style={{ animationDelay: `${i * 25}ms` }}>
+        <rect key={i} x={c.x} y={Math.max(24, c.y)} width={CELL} height={CELL} fill={INK.secondary}>
           <title>{format(c.g)}</title>
         </rect>
       ))}

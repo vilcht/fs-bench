@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ClientMessage, Role, RoomState, ServerMessage } from '../shared/protocol'
+import type { ClientMessage, Cursor, Role, RoomState, ServerMessage } from '../shared/protocol'
 
 export function useRoom(role: Role, params: { id?: string; key?: string }) {
   const [state, setState] = useState<RoomState | null>(null)
+  const [cursors, setCursors] = useState<Cursor[]>([])
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const ws = useRef<WebSocket | null>(null)
@@ -28,6 +29,8 @@ export function useRoom(role: Role, params: { id?: string; key?: string }) {
         if (msg.t === 'state') {
           setState(msg.state)
           setError(null)
+        } else if (msg.t === 'cursors') {
+          setCursors(msg.cursors)
         } else {
           setError(msg.message)
         }
@@ -49,5 +52,5 @@ export function useRoom(role: Role, params: { id?: string; key?: string }) {
     if (ws.current?.readyState === WebSocket.OPEN) ws.current.send(JSON.stringify(msg))
   }, [])
 
-  return { state, connected, error, send }
+  return { state, cursors, connected, error, send }
 }
