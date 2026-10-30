@@ -1,0 +1,12 @@
+label: amd-ryzen-5-5600x-linux
+bench_dir: /home/vilcht/fsbench-data/home
+fs: btrfs
+scanner: none
+commit: e91c7052327199d7bef160c7f1ef731760c2bc35
+node: v22.22.3  pnpm: 12.3.4  git version 2.54.0
+uname: Linux fedora 6.19.14-300.fc44.x86_64 #1 SMP PREEMPT_DYNAMIC Thu Apr 23 15:17:50 UTC 2026 x86_64 GNU/Linux
+cpu:  AMD Ryzen 5 5600X 6-Core Processor
+cores: 12
+MemTotal:       49260272 kB
+/dev/nvme1n1p5[/home] btrfs rw,relatime,seclabel,compress=zstd:1,ssd,discard=async,space_cache=v2,subvolid=256,subvol=/home
+nvme1n1p5  btrfs
