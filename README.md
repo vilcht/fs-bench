@@ -44,11 +44,17 @@ curl -fsSL https://raw.githubusercontent.com/vilcht/fs-bench/main/run.sh | NS=1 
    | `git_status` | N × `git status` | checking whether files changed |
    | `remove` | N × `git worktree remove --force` | deleting many files at once |
 
+   Each phase records wall time, plus user and kernel CPU-seconds of all its processes.
+   A background sampler (`sampler.pl`) logs machine-wide CPU %, iowait (Linux), RAM in use, file cache,
+   and disk MB/s to `samples.csv`. `summarize.py` slices it per phase. Disk traffic counts until
+   the `sync` after each phase finishes, so buffered writes aren't missed. The sync isn't part of the wall time.
+
    Each runs with pnpm's default import method (`auto`: clone → hardlink → copy) and with
    `hardlink` forced, which puts every filesystem on the same path.
 5. Packs `results/` into the tarball and deletes the benchmark data (`KEEP_DATA=1` keeps it).
 
-The headline metric is seconds per agent as N grows. Flat means the filesystem keeps up with parallel agents;
+The headline metric is seconds per agent as N grows. The kernel share of CPU time shows how much of
+that is filesystem work inside the OS rather than pnpm or git themselves. Flat means the filesystem keeps up with parallel agents;
 climbing means it's choking on contention.
 
 Parallel `git worktree add` can race (`fatal: failed to read .git/worktrees/<n>/commondir`).
@@ -66,6 +72,6 @@ python3 summarize.py              # median tables for everything in results/
 Knobs (env): `LABEL`, `SOURCE=/path/to/l2beat` (skip cloning from GitHub), `NS="1 4 16"`, `REPS=2`,
 `METHODS="auto hardlink copy"`, `VOLUMES="ext4"` (Linux volumes; empty for home only).
 
-Results land in `results/<label>-<fs>-<timestamp>/` (`results.csv`, `machine.txt`, `logs/`).
+Results land in `results/<label>-<fs>-<timestamp>/` (`results.csv`, `samples.csv`, `machine.txt`, `logs/`).
 Rep 0 is a warmup and is dropped from the summary. Never run two benchmarks at once on the same machine:
 they slow each other down and invalidate both.

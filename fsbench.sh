@@ -59,7 +59,7 @@ OUT=$SCRIPT_DIR/results/$LABEL-$FS-$(date +%Y%m%d-%H%M%S)
 LOGS=$OUT/logs
 mkdir -p "$LOGS"
 CSV=$OUT/results.csv
-echo "label,os,fs,spotlight,method,phase,n,rep,seconds,ok" >"$CSV"
+echo "label,os,fs,spotlight,method,phase,n,rep,seconds,ok,t_start,t_end,t_flushed,cpu_user_s,cpu_sys_s" >"$CSV"
 
 machine_info() {
   echo "label: $LABEL"
@@ -89,14 +89,24 @@ machine_info() {
     cat /sys/class/power_supply/AC*/online 2>/dev/null | sed 's/^/ac_online: /'
   fi
 }
-record() { # method phase n rep seconds ok
-  echo "$LABEL,$OS,$FS,$SPOTLIGHT,$1,$2,$3,$4,$5,$6" >>"$CSV"
+record() { # method phase n rep seconds ok t_start t_end t_flushed cpu_user_s cpu_sys_s
+  echo "$LABEL,$OS,$FS,$SPOTLIGHT,$1,$2,$3,$4,$5,$6,${7:-},${8:-},${9:-},${10:-},${11:-}" >>"$CSV"
   printf '  %-9s %-14s n=%-2s rep=%s  %8.2fs %s\n' "$1" "$2" "$3" "$4" "$5" "$([ "$6" = 1 ] || echo FAILED)"
 }
 
-# Runs `$fn i` for i in 1..n concurrently and records the wall time of the batch.
+# Sets CHILD_CPU to cumulative "user sys" CPU seconds of all waited-for descendants. Call it
+# directly, not in $(...): a subshell starts with empty child accounting.
+child_cpu() {
+  times >"$OUT/.times"
+  CHILD_CPU=$(tail -1 "$OUT/.times" | awk '{ for (i = 1; i <= 2; i++) { split($i, a, "m"); sub("s", "", a[2]); printf "%.3f ", a[1] * 60 + a[2] } }')
+}
+
+# Runs `$fn i` for i in 1..n concurrently and records the wall time of the batch. The sync
+# afterwards isn't part of the wall time, but its window still counts for disk traffic.
 run_parallel() { # method phase n rep fn
-  local method=$1 phase=$2 n=$3 rep=$4 fn=$5 i pids="" ok=1 t0 t1
+  local method=$1 phase=$2 n=$3 rep=$4 fn=$5 i pids="" ok=1 t0 t1 t2 c0 c1
+  child_cpu
+  c0=$CHILD_CPU
   t0=$(now)
   i=1
   while [ $i -le $n ]; do
@@ -106,7 +116,12 @@ run_parallel() { # method phase n rep fn
   done
   for p in $pids; do wait $p || ok=0; done
   t1=$(now)
-  record "$method" "$phase" "$n" "$rep" "$(awk "BEGIN{print $t1 - $t0}")" $ok
+  child_cpu
+  c1=$CHILD_CPU
+  sync
+  t2=$(now)
+  record "$method" "$phase" "$n" "$rep" "$(awk "BEGIN{print $t1 - $t0}")" $ok "$t0" "$t1" "$t2" \
+    $(echo "$c0 $c1" | awk '{ printf "%.3f %.3f", $3 - $1, $4 - $2 }')
 }
 
 import_flag() {
@@ -157,6 +172,13 @@ fi
 machine_info >"$OUT/machine.txt" 2>&1
 cat "$OUT/machine.txt"
 
+# Machine-wide CPU / RAM / disk samples for the whole run; summarize.py slices them per phase.
+DISK_DEV=
+[ "$OS" = Darwin ] || DISK_DEV=$(lsblk -ndo KNAME "$(findmnt -no SOURCE -T "$BENCH_DIR" | sed 's/\[.*//')")
+perl "$SCRIPT_DIR/sampler.pl" $DISK_DEV >"$OUT/samples.csv" 2>"$LOGS/sampler.log" &
+SAMPLER=$!
+trap 'kill $SAMPLER 2>/dev/null' EXIT
+
 echo "== setup: warm pnpm store (network, not part of the comparison)"
 t0=$(now)
 (cd "$REPO" && pnpm install --frozen-lockfile --ignore-scripts --store-dir "$STORE" \
@@ -179,10 +201,10 @@ while [ $rep -le "$REPS" ]; do
     for n in $NS; do
       echo "== rep $rep, $METHOD, n=$n"
       cleanup_worktrees
-      run_parallel "$METHOD" worktree_add "$n" "$rep" job_worktree; sync
-      run_parallel "$METHOD" install "$n" "$rep" job_install; sync
-      run_parallel "$METHOD" git_status "$n" "$rep" job_status; sync
-      run_parallel "$METHOD" remove "$n" "$rep" job_remove; sync
+      run_parallel "$METHOD" worktree_add "$n" "$rep" job_worktree
+      run_parallel "$METHOD" install "$n" "$rep" job_install
+      run_parallel "$METHOD" git_status "$n" "$rep" job_status
+      run_parallel "$METHOD" remove "$n" "$rep" job_remove
     done
   done
   rep=$((rep + 1))
