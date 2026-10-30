@@ -14,7 +14,7 @@ and the three closest players. Scores go to a leaderboard.
 - `/notes?key=…`: speaker notes, timer, vote counts and poll answers for a second screen
 
 Presenter keys: `→` / `Space` / `PageDown` next (on a poll slide: first press reveals),
-`←` / `PageUp` back, `F` fullscreen, `H` hide the status line, `Shift+R` reset all votes and players.
+`←` / `PageUp` back, `F` fullscreen, `Shift+R` reset all votes and players.
 
 ## Data
 
