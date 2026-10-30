@@ -28,7 +28,7 @@ interface Stored {
   step: number
   polls: Record<string, PollStatus>
   players: Record<string, { name: string; cursor?: string }>
-  votes: Record<string, Record<string, string | number>>
+  votes: Record<string, Record<string, number>>
 }
 
 interface Attachment {
@@ -142,9 +142,8 @@ export class Room extends DurableObject<Env> {
       if (!POLLS.some((p) => p.id === msg.pollId)) return 'Unknown poll'
       if (s.polls[msg.pollId] !== 'open') return 'Voting is closed'
       const p = poll(msg.pollId)
-      const value = p.kind === 'choice' ? String(msg.value) : Number(msg.value)
-      if (p.kind === 'choice' && !p.options.some((o) => o.id === value)) return 'Unknown option'
-      if (p.kind === 'number' && !(Number(value) > 0)) return 'Guess a positive number'
+      const value = Number(msg.value)
+      if (!(value >= p.min && value <= p.max)) return 'Guess out of range'
       ;(s.votes[msg.pollId] ??= {})[att.id] = value
       return
     }
@@ -185,15 +184,15 @@ export class Room extends DurableObject<Env> {
     const polls: Record<string, PollView> = {}
     for (const p of POLLS) {
       const status = this.s.polls[p.id] ?? 'closed'
-      const votes = Object.values(this.s.votes[p.id] ?? {})
+      const votes = Object.entries(this.s.votes[p.id] ?? {})
       const view: PollView = { status, votes: votes.length }
       if (status === 'revealed') {
-        if (p.kind === 'choice') {
-          view.tally = {}
-          for (const v of votes) view.tally[String(v)] = (view.tally[String(v)] ?? 0) + 1
-        } else {
-          view.guesses = votes.map(Number)
-        }
+        view.guesses = votes.map(([, v]) => v)
+        view.closest = votes
+          .filter(([id]) => this.s.players[id])
+          .map(([id, v]) => ({ name: this.s.players[id].name, value: v, points: score(p, v) }))
+          .sort((a, b) => b.points - a.points)
+          .slice(0, 3)
       }
       polls[p.id] = view
     }

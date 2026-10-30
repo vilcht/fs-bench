@@ -3,9 +3,9 @@ export type PollStatus = 'closed' | 'open' | 'revealed'
 export interface PollView {
   status: PollStatus
   votes: number
-  /** Only once revealed: choice id -> count, or every numeric guess. */
-  tally?: Record<string, number>
+  /** Only once revealed: every guess, and the three closest players. */
   guesses?: number[]
+  closest?: { name: string; value: number; points: number }[]
 }
 
 export interface Me {
@@ -15,7 +15,7 @@ export interface Me {
   name: string | null
   score: number
   rank: number | null
-  votes: Record<string, string | number>
+  votes: Record<string, number>
   points: Record<string, number>
 }
 
@@ -30,7 +30,7 @@ export interface RoomState {
 
 export type ClientMessage =
   | { t: 'join'; name: string }
-  | { t: 'vote'; pollId: string; value: string | number }
+  | { t: 'vote'; pollId: string; value: number }
   /** Pointer position on the slide, 0..1 in both axes; x < 0 means the pointer left. */
   | { t: 'cursor'; x: number; y: number }
   // presenter only

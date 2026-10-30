@@ -1,16 +1,15 @@
-import type { ReactNode } from 'react'
-import { type Config, NS, cfg, configs, phaseTime, setupTime } from '../shared/data'
-import { type ChoicePoll, type NumberPoll, POLLS, poll } from '../shared/polls'
+import { Fragment, type ReactNode } from 'react'
+import { type Config, NS, type Resources, cfg, configs, phaseTime, setupTime } from '../shared/data'
+import { METRIC_LABEL, POLLS, type Poll, ZERO_AT, describeRatio, fmtRatio, metricValue, poll } from '../shared/polls'
 import type { RoomState } from '../shared/protocol'
 import { BlockText } from './blocks/BlockText'
 import { SectorField } from './blocks/SectorField'
 import { Bars } from './charts/Bars'
-import { Columns } from './charts/Columns'
 import { Guesses } from './charts/Guesses'
 import { Lines } from './charts/Lines'
 import { Race } from './charts/Race'
 import { JoinCard } from './JoinCard'
-import { INK, familyColor, fmtSeconds, fmtTimes } from './theme'
+import { INK, familyColor, fmtSeconds } from './theme'
 
 export interface SlideCtx {
   step: number
@@ -28,6 +27,8 @@ export interface SlideDef {
   sources?: string[]
   /** Full-bleed slides draw their own background. */
   bleed?: boolean
+  /** Draws resource figures: badge when any source's resources are mock. */
+  resources?: boolean
   render: (ctx: SlideCtx) => ReactNode
 }
 
@@ -41,25 +42,10 @@ const RACE_LABELS: Record<string, string> = {
   'desktop-win:ntfs': 'Desktop · Windows',
 }
 
+const RACE = ['desktop:ext4', 'huawei:home-ext4', 'macbook:apfs', 'desktop-win:ntfs']
+const RESOURCE_ROWS = ['desktop:ext4', 'huawei:home-ext4', 'macbook:apfs', 'macmini:apfs', 'desktop-win:ntfs', 'desktop-win:devdrive', 'desktop-wsl:home-ext4']
 const SCALING = ['macbook:apfs', 'macmini:apfs', 'desktop:ext4', 'huawei:home-ext4', 'desktop-win:ntfs']
 const LINUX_FS = ['desktop:ext4', 'desktop:xfs', 'desktop:btrfs']
-const MACS = ['macbook:apfs', 'macbook:apfs-noindex', 'macmini:apfs', 'macmini:apfs-noindex']
-
-function choiceBars(p: ChoicePoll, n: number) {
-  return p.options
-    .map((o) => {
-      const c = cfg(o.id)
-      return {
-        id: o.id,
-        label: o.label,
-        sub: c.stackName,
-        value: setupTime(c, n),
-        color: familyColor(c.family),
-        note: o.id === p.answer ? 'fastest' : undefined,
-      }
-    })
-    .sort((a, b) => a.value - b.value)
-}
 
 export const SLIDES: SlideDef[] = [
   {
@@ -152,34 +138,27 @@ export const SLIDES: SlideDef[] = [
     },
   },
   {
-    id: 'poll-one-agent',
-    title: 'Vote: one agent',
-    poll: 'one-agent',
-    notes: 'Warm-up. One agent, no contention. Reveal shows checkout + install time.',
-    sources: poll('one-agent').sources,
-    render: (ctx) => {
-      const p = poll('one-agent') as ChoicePoll
-      return (
-        <PollSlide p={p} ctx={ctx}>
-          <Bars items={choiceBars(p, 1)} width={W - 420} format={fmtSeconds} labelWidth={330} />
-        </PollSlide>
-      )
-    },
+    id: 'how-to-play',
+    title: 'How to play',
+    notes: 'Explain the slider once: we show one result, then the next machine. Guess how many times as long it takes. 1x same, 0.5x twice as fast, 3x three times as long. Closest guesses get the most points; 2.5x off gets nothing.',
+    sources: [POLLS[0].base],
+    render: () => <HowToPlay />,
   },
   {
-    id: 'poll-sixteen',
-    title: 'Vote: sixteen agents (race)',
-    poll: 'sixteen',
-    notes: 'Now the real workload. The reveal replays the recorded run: every row is one agent, faint = checkout, solid = install.',
-    sources: poll('sixteen').sources,
-    render: (ctx) => {
-      const p = poll('sixteen') as ChoicePoll
-      return (
-        <PollSlide p={p} ctx={ctx}>
-          <Race configs={p.options.map((o) => cfg(o.id))} phases={['worktree_add', 'install']} width={W - 400} playing={ctx.step === 1} labels={RACE_LABELS} />
-        </PollSlide>
-      )
-    },
+    id: 'round-huawei',
+    title: 'Round: Huawei laptop',
+    poll: 'huawei',
+    notes: 'Same OS, same filesystem, a laptop CPU and laptop SSD. Most people guess way slower.',
+    sources: poll('huawei').sources,
+    render: (ctx) => <RoundSlide p={poll('huawei')} ctx={ctx} />,
+  },
+  {
+    id: 'round-macbook',
+    title: 'Round: MacBook',
+    poll: 'macbook',
+    notes: 'The Mac enters. Base is the Huawei laptop, the closest hardware class.',
+    sources: poll('macbook').sources,
+    render: (ctx) => <RoundSlide p={poll('macbook')} ctx={ctx} />,
   },
   {
     id: 'scaling',
@@ -222,6 +201,14 @@ export const SLIDES: SlideDef[] = [
     ),
   },
   {
+    id: 'round-spotlight',
+    title: 'Round: Spotlight off',
+    poll: 'spotlight',
+    notes: 'Any folder whose name ends in .noindex is skipped by Spotlight. Same Mac, same disk, only the folder name changes.',
+    sources: poll('spotlight').sources,
+    render: (ctx) => <RoundSlide p={poll('spotlight')} ctx={ctx} />,
+  },
+  {
     id: 'linux-fs',
     title: 'Copy-on-write on Linux too',
     notes:
@@ -245,77 +232,40 @@ export const SLIDES: SlideDef[] = [
     ),
   },
   {
-    id: 'poll-mac-remove',
-    title: 'Vote: MacBook deleting 16 worktrees',
-    poll: 'mac-remove',
-    notes: 'Extrapolate! Deleting is the step nobody thinks about, and often the slowest.',
-    sources: poll('mac-remove').sources,
-    render: (ctx) => {
-      const p = poll('mac-remove') as NumberPoll
-      const c = cfg('macbook:apfs')
-      const max = Math.max(...NS.map((n) => phaseTime(c, 'remove', n)))
-      return (
-        <PollSlide p={p} ctx={ctx}>
-          <Columns
-            columns={NS.map((n) => ({ label: n === 1 ? '1 agent' : `${n} agents`, value: phaseTime(c, 'remove', n), hidden: n === 16 && ctx.step === 0 }))}
-            color={familyColor(c.family)}
-            width={W - 420}
-            height={ctx.step === 0 ? 540 : 290}
-            format={fmtSeconds}
-            max={max}
-          />
-        </PollSlide>
-      )
-    },
+    id: 'round-windows',
+    title: 'Round: Windows',
+    poll: 'windows',
+    notes: 'Same desktop, dual boot. Linux ext4 vs Windows NTFS with Defender on.',
+    sources: poll('windows').sources,
+    render: (ctx) => <RoundSlide p={poll('windows')} ctx={ctx} />,
   },
   {
-    id: 'poll-spotlight',
-    title: 'Vote: Spotlight off',
-    poll: 'spotlight',
-    notes: 'Any folder whose name ends in .noindex is skipped by Spotlight. Same Mac, same disk, only the folder name changes. Guess the speedup.',
-    sources: poll('spotlight').sources,
-    render: (ctx) => {
-      const p = poll('spotlight') as NumberPoll
-      return (
-        <PollSlide p={p} ctx={ctx}>
-          {ctx.step === 0 ? (
-            <div className="hint">
-              <code>~/worktrees/agent-1</code>
-              <span className="hint-vs">vs</span>
-              <code>
-                ~/worktrees<b>.noindex</b>/agent-1
-              </code>
-            </div>
-          ) : (
-            <Bars
-              items={MACS.map((id) => {
-                const c = cfg(id)
-                return { id, label: c.machineName, sub: c.stackName, value: setupTime(c, 16), color: familyColor(c.family) }
-              })}
-              width={W - 420}
-              labelWidth={300}
-              format={fmtSeconds}
-            />
-          )}
-        </PollSlide>
-      )
-    },
+    id: 'round-devdrive',
+    title: 'Round: Dev Drive',
+    poll: 'devdrive',
+    notes: 'Microsoft\'s fix for exactly this: ReFS plus Defender in performance mode.',
+    sources: poll('devdrive').sources,
+    render: (ctx) => <RoundSlide p={poll('devdrive')} ctx={ctx} />,
   },
   {
-    id: 'poll-same-pc',
-    title: 'Vote: same PC, four setups (race)',
-    poll: 'same-pc',
-    notes: 'Same desktop, dual boot. Windows on NTFS with Defender, a Dev Drive, WSL2, and plain Linux.',
-    sources: poll('same-pc').sources,
-    render: (ctx) => {
-      const p = poll('same-pc') as ChoicePoll
-      const labels = Object.fromEntries(p.options.map((o) => [o.id, o.label]))
-      return (
-        <PollSlide p={p} ctx={ctx}>
-          <Race configs={p.options.map((o) => cfg(o.id))} phases={['worktree_add', 'install']} width={W - 400} playing={ctx.step === 1} labels={labels} />
-        </PollSlide>
-      )
-    },
+    id: 'round-wsl',
+    title: 'Round: WSL2',
+    poll: 'wsl',
+    notes: 'The repo lives inside WSL2: a real Linux kernel and ext4 on a virtual disk.',
+    sources: poll('wsl').sources,
+    render: (ctx) => <RoundSlide p={poll('wsl')} ctx={ctx} />,
+  },
+  {
+    id: 'race',
+    title: 'The full race',
+    notes: 'Replay of the recorded runs, 16 agents each. Every row is one agent; faint = checkout, solid = install.',
+    sources: RACE,
+    render: () => (
+      <div className="slide">
+        <h2>Sixteen agents, four machines, one replay</h2>
+        <Race configs={RACE.map((id) => cfg(id))} phases={['worktree_add', 'install']} width={W} playing labels={RACE_LABELS} />
+      </div>
+    ),
   },
   {
     id: 'why-windows',
@@ -333,6 +283,22 @@ export const SLIDES: SlideDef[] = [
         ]}
       />
     ),
+  },
+  {
+    id: 'round-delete',
+    title: 'Round: delete',
+    poll: 'delete',
+    notes: 'Deleting is the step nobody thinks about. Base: the Linux desktop deleting 16 worktrees.',
+    sources: poll('delete').sources,
+    render: (ctx) => <RoundSlide p={poll('delete')} ctx={ctx} />,
+  },
+  {
+    id: 'resources',
+    title: 'What the machine was doing',
+    notes: 'Install phase, 16 agents at once. CPU busy is machine-wide; kernel share is how much of the benchmark processes\' CPU time went to the OS rather than git or pnpm. High kernel share = filesystem work inside the OS. Windows has no kernel split (Git Bash cannot see native process times).',
+    sources: RESOURCE_ROWS,
+    resources: true,
+    render: () => <ResourceGrid />,
   },
   {
     id: 'git-race',
@@ -476,98 +442,186 @@ function VoteCells({ votes }: { votes: number }) {
   )
 }
 
-function PollSlide({ p, ctx, children }: { p: ChoicePoll | NumberPoll; ctx: SlideCtx; children: ReactNode }) {
+function MachineCard({ c, value, hidden, tag }: { c: Config; value: number; hidden?: boolean; tag: string }) {
+  return (
+    <div className={hidden ? 'machine-card unknown' : 'machine-card'}>
+      <span className="machine-tag">{tag}</span>
+      <span className="machine-name">
+        <i style={{ background: familyColor(c.family) }} />
+        {c.machineName}
+      </span>
+      <span className="machine-stack">
+        {c.stackName} · {c.machineDetail}
+      </span>
+      <span className="machine-value">
+        <BlockText text={hidden ? '?' : fmtSeconds(value).replace(' ', '')} cell={15} />
+      </span>
+    </div>
+  )
+}
+
+const SCALE_TICKS = [0.1, 0.15, 0.2, 0.25, 0.33, 0.5, 0.75, 1, 1.5, 2, 3, 4, 5, 6, 8, 10, 15, 20, 30]
+
+/** The multiple axis everyone's slider uses: log scale, 1× in the middle of the meaning. */
+function RatioScale({ min, max, width, example }: { min: number; max: number; width: number; example?: number }) {
+  const pad = 40
+  const height = 150
+  const y = 70
+  const x = (v: number) => pad + ((Math.log(v) - Math.log(min)) / (Math.log(max) - Math.log(min))) * (width - 2 * pad)
+  const ticks = SCALE_TICKS.filter((t) => t >= min && t <= max)
+  return (
+    <svg width={width} height={height} role="img" className="chart" aria-label={`Scale from ${min}× to ${max}×`}>
+      <rect x={pad} y={y - 3} width={width - 2 * pad} height={6} fill={INK.axis} />
+      <text x={pad} y={y - 26} className="chart-sub">
+        ← faster
+      </text>
+      <text x={width - pad} y={y - 26} textAnchor="end" className="chart-sub">
+        slower →
+      </text>
+      {ticks.map((t) => (
+        <g key={t}>
+          <rect x={x(t) - (t === 1 ? 5 : 3)} y={y - (t === 1 ? 18 : 12)} width={t === 1 ? 10 : 6} height={t === 1 ? 36 : 24} fill={t === 1 ? INK.primary : INK.secondary} />
+          <text x={x(t)} y={y + 48} textAnchor="middle" className={t === 1 ? 'chart-value' : 'chart-tick'}>
+            {t === 1 ? 'same' : fmtRatio(t)}
+          </text>
+        </g>
+      ))}
+      {example !== undefined && (
+        <g>
+          <rect x={x(example) - 14} y={y - 14} width={28} height={28} fill={INK.primary} stroke={INK.void} strokeWidth={4} />
+          <text x={x(example)} y={y - 30} textAnchor="middle" className="chart-label small">
+            your guess: {fmtRatio(example)}
+          </text>
+        </g>
+      )}
+    </svg>
+  )
+}
+
+function RoundSlide({ p, ctx }: { p: Poll; ctx: SlideCtx }) {
   const view = ctx.state?.polls[p.id]
   const revealed = ctx.step === 1
   const index = POLLS.findIndex((x) => x.id === p.id) + 1
+  const base = cfg(p.base)
+  const target = cfg(p.target)
   return (
-    <div className="slide poll-slide">
+    <div className="slide round">
       <div className="poll-head">
         <span className="poll-tag">
-          <BlockText text={`VOTE ${index}/${POLLS.length}`} cell={6} />
+          <BlockText text={`ROUND ${index}/${POLLS.length}`} cell={6} />
         </span>
+        <span className="round-metric">{METRIC_LABEL[p.metric]}</span>
         {!revealed && <VoteCells votes={view?.votes ?? 0} />}
       </div>
-      <h2>{p.question}</h2>
-      {p.kind === 'choice' && !revealed ? (
-        <OptionGrid p={p} />
-      ) : (
-        <div className="poll-body fade-in" key={ctx.step}>
-          <div className="poll-main">{children}</div>
-          <div className="poll-side">
-            {p.kind === 'choice' ? (
-              <ChoiceTally p={p} tally={view?.tally} />
-            ) : revealed ? (
-              <div className="answer">
-                <span className="answer-label">Answer</span>
-                <BlockText text={p.unit === 's' ? fmtSeconds(p.answer).replace(' ', '') : fmtTimes(p.answer)} cell={13} />
-              </div>
-            ) : (
-              <div className="vote-cta">Guess on your device</div>
-            )}
-          </div>
+      <h2>{p.prompt}</h2>
+      <div className="faceoff">
+        <MachineCard c={base} value={metricValue(base, p.metric)} tag="Known" />
+        <div className="faceoff-x">
+          <BlockText text={revealed ? `×${fmtRatio(p.answer).slice(0, -1)}` : '×?'} cell={revealed ? 8 : 12} />
+          {revealed && <span className="faceoff-say fade-in">{describeRatio(p.answer)}</span>}
         </div>
-      )}
-      {revealed && p.kind === 'number' && (
-        <div className="fade-in">
-        <Guesses
-          guesses={view?.guesses ?? []}
-          answer={p.answer}
-          min={p.min}
-          max={p.max}
-          width={W}
-          format={(v) => (p.unit === 's' ? `${+v.toPrecision(2)} s` : `${+v.toPrecision(2)}×`)}
-        />
+        <MachineCard c={target} value={metricValue(target, p.metric)} hidden={!revealed} tag={revealed ? 'Revealed' : 'Your guess'} />
+      </div>
+      {revealed ? (
+        <div className="round-reveal fade-in" key="reveal">
+          <Guesses guesses={view?.guesses ?? []} answer={p.answer} min={p.min} max={p.max} width={W - 420} format={fmtRatio} />
+          <ol className="closest">
+            {(view?.closest ?? []).map((c, i) => (
+              <li key={i}>
+                <span className="rank">{i + 1}</span>
+                <span className="board-name">{c.name}</span>
+                <span className="closest-guess">{fmtRatio(c.value)}</span>
+                <span className="closest-points">+{c.points}</span>
+              </li>
+            ))}
+            {!view?.closest?.length && <li className="muted">No guesses</li>}
+          </ol>
+        </div>
+      ) : (
+        <div className="round-scale">
+          <RatioScale min={p.min} max={p.max} width={W} />
         </div>
       )}
     </div>
   )
 }
 
-function OptionGrid({ p }: { p: ChoicePoll }) {
+function HowToPlay() {
+  const first = POLLS[0]
+  const base = cfg(first.base)
   return (
-    <ol className="option-grid">
-      {p.options.map((o, i) => {
-        const c = cfg(o.id)
-        return (
-          <li key={o.id}>
-            <span className="option-letter" style={{ background: familyColor(c.family) }}>
-              <BlockText text={String.fromCharCode(65 + i)} cell={10} color={INK.void} />
-            </span>
-            <span className="option-text">
-              <span className="option-label">{o.label}</span>
-              <span className="option-detail">
-                {c.stackName} · {c.machineDetail}
-              </span>
-            </span>
-          </li>
-        )
-      })}
-    </ol>
+    <div className="slide how">
+      <h2>Higher or lower?</h2>
+      <ol className="how-steps">
+        <li>
+          <b>You see one result.</b> First up: {base.name} gets 16 agents ready in {fmtSeconds(metricValue(base, first.metric))}.
+        </li>
+        <li>
+          <b>Then the next machine.</b> How many times as long will it take?
+        </li>
+        <li>
+          <b>Drag your slider.</b> 0.5× is twice as fast, 1× the same, 3× three times as long.
+        </li>
+      </ol>
+      <RatioScale min={0.5} max={3} width={W} example={2} />
+      <p className="footnote">
+        Exact guess: 1000 points, down to 0 when you're {ZERO_AT}× off. The three closest get named on screen.
+      </p>
+    </div>
   )
 }
 
-function ChoiceTally({ p, tally }: { p: ChoicePoll; tally?: Record<string, number> }) {
-  const total = Object.values(tally ?? {}).reduce((a, b) => a + b, 0)
+const RESOURCE_COLS: { key: keyof Resources; label: string; sub: string; format: (v: number) => string; max?: number }[] = [
+  { key: 'busy_pct', label: 'CPU busy', sub: 'all cores', format: (v) => `${Math.round(v)}%`, max: 100 },
+  { key: 'kernel_pct', label: 'Kernel share', sub: 'of the CPU time', format: (v) => `${Math.round(v)}%`, max: 100 },
+  { key: 'mem_mb', label: 'Extra RAM', sub: 'peak', format: (v) => (v >= 1000 ? `${(v / 1024).toFixed(1)} GB` : `${Math.round(v)} MB`) },
+  { key: 'disk_mb', label: 'Disk traffic', sub: 'read + written', format: (v) => (v >= 1000 ? `${(v / 1024).toFixed(1)} GB` : `${Math.round(v)} MB`) },
+]
+const RES_CELLS = 12
+
+function ResourceGrid() {
+  const rows = RESOURCE_ROWS.map((id) => cfg(id))
+  const max = Object.fromEntries(
+    RESOURCE_COLS.map((col) => [col.key, col.max ?? Math.max(1, ...rows.map((c) => c.resources.install?.[col.key] ?? 0))]),
+  )
   return (
-    <ol className="tally">
-      {p.options.map((o, i) => {
-        const count = tally?.[o.id] ?? 0
-        const correct = o.id === p.answer
-        return (
-          <li key={o.id} className={correct ? 'correct' : ''}>
-            <span className="tally-letter">{String.fromCharCode(65 + i)}</span>
-            <span className="tally-text">
-              <span>{o.label}</span>
-              <span className="tally-count">
-                {count} {count === 1 ? 'vote' : 'votes'}
-                {total > 0 && ` · ${Math.round((100 * count) / total)}%`}
+    <div className="slide">
+      <h2>16 installs at once: what the machine was doing</h2>
+      <div className="res-grid">
+        <span />
+        {RESOURCE_COLS.map((col) => (
+          <span className="res-head" key={col.key}>
+            {col.label}
+            <small>{col.sub}</small>
+          </span>
+        ))}
+        {rows.map((c) => (
+          <Fragment key={c.id}>
+            <span className="res-name">
+              <i style={{ background: familyColor(c.family) }} />
+              <span>
+                {c.machineName}
+                <small>{c.stackName}</small>
               </span>
             </span>
-          </li>
-        )
-      })}
-    </ol>
+            {RESOURCE_COLS.map((col) => {
+              const v = c.resources.install?.[col.key]
+              const filled = v === undefined ? 0 : Math.max(1, Math.round((v / max[col.key]) * RES_CELLS))
+              return (
+                <span className="res-cell" key={col.key}>
+                  <span className="res-cells">
+                    {Array.from({ length: RES_CELLS }, (_, k) => (
+                      <i key={k} style={k < filled ? { background: familyColor(c.family) } : undefined} />
+                    ))}
+                  </span>
+                  <span className="res-value">{v === undefined ? 'n/a' : col.format(v)}</span>
+                </span>
+              )
+            })}
+          </Fragment>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -601,5 +655,8 @@ function Leaderboard({ state }: { state: RoomState | null }) {
 }
 
 export function slideHasMock(s: SlideDef) {
-  return (s.sources ?? []).some((id) => cfg(id).mock || (cfg(id).raceMock && s.id.startsWith('poll-')))
+  return (s.sources ?? []).some((id) => {
+    const c = cfg(id)
+    return c.mock || (s.id === 'race' && c.raceMock) || (s.resources && c.resourcesMock)
+  })
 }

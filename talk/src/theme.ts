@@ -26,4 +26,3 @@ export const INK = {
 }
 
 export const fmtSeconds = (s: number) => (s >= 100 ? `${Math.round(s)} s` : s >= 10 ? `${s.toFixed(1)} s` : `${s.toFixed(2)} s`)
-export const fmtTimes = (x: number) => `${x >= 10 ? x.toFixed(0) : x.toFixed(1)}×`

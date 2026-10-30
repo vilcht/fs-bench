@@ -30,6 +30,21 @@ export interface Config {
   retries: Record<string, number>
   failures: Record<string, number>
   race: { n: number; rep: number; phases: Partial<Record<Phase, RacePhase>> }
+  /** Median resource use per phase at the highest agent count. */
+  resources: Partial<Record<Phase, Resources>>
+  resourcesMock?: boolean
+}
+
+export interface Resources {
+  /** Machine-wide CPU busy, % of all cores. */
+  busy_pct?: number
+  /** Kernel share of the benchmark processes' CPU time. */
+  kernel_pct?: number
+  cpu_s?: number
+  /** Peak RAM above the level before the phase. */
+  mem_mb?: number
+  /** Disk read + written, until the post-phase sync. */
+  disk_mb?: number
 }
 
 export const configs = raw.configs as unknown as Config[]

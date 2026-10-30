@@ -65,6 +65,49 @@ def median(xs):
     return statistics.median(xs) if xs else None
 
 
+def num(v):
+    return float(v) if v not in (None, "") else None
+
+
+def load_samples(path):
+    if not os.path.exists(path):
+        return []
+    rows = []
+    for r in csv.DictReader(open(path)):
+        try:
+            rows.append({k: num(v) for k, v in r.items()})
+        except ValueError:
+            continue
+    return [r for r in rows if r.get("ts") and r.get("interval_s")]
+
+
+def window(samples, t0, t1):
+    """Machine-wide use during [t0, t1] (same slicing as summarize.py)."""
+    busy = disk = weight = 0.0
+    peak = baseline = None
+    for s in samples:
+        start, end = s["ts"] - s["interval_s"], s["ts"]
+        if end <= t0:
+            baseline = s["mem_used_mb"]
+            continue
+        overlap = min(end, t1) - max(start, t0)
+        if overlap <= 0:
+            if start >= t1:
+                break
+            continue
+        weight += overlap
+        busy += overlap * ((s["cpu_user"] or 0) + (s["cpu_sys"] or 0))
+        disk += overlap * (s["disk_total_mb_s"] or 0)
+        if s["mem_used_mb"] is not None:
+            peak = s["mem_used_mb"] if peak is None else max(peak, s["mem_used_mb"])
+    if not weight:
+        return {}
+    out = {"busy_pct": busy / weight, "disk_mb": disk}
+    if peak is not None and baseline is not None:
+        out["mem_mb"] = max(0.0, peak - baseline)
+    return out
+
+
 def load_run(run_dir):
     info = parse_machine_txt(os.path.join(run_dir, "machine.txt"))
     rows = list(csv.DictReader(open(os.path.join(run_dir, "results.csv"))))
@@ -78,6 +121,8 @@ def load_run(run_dir):
 
     times = defaultdict(list)
     cpu = defaultdict(list)
+    res = defaultdict(lambda: defaultdict(list))
+    samples = load_samples(os.path.join(run_dir, "samples.csv"))
     batches = {}
     failures = defaultdict(int)
     for r in rows:
@@ -93,9 +138,16 @@ def load_run(run_dir):
             times[(r["phase"], n)].append(float(r["seconds"]))
             if r.get("t_start"):
                 batches[(r["phase"], n, int(r["rep"]))] = (float(r["t_start"]), float(r["t_end"]))
+            collect_resources(res[(r["phase"], n)], r, samples)
 
     ns = sorted({n for _, n in times})
     phases = {p: {str(n): median(times[(p, n)]) for n in ns if times[(p, n)]} for p in PHASES}
+    top = ns[-1] if ns else None
+    resources = {
+        p: {k: round(median(v), 1) for k, v in res[(p, top)].items() if v}
+        for p in ["worktree_add", "install", "remove"]
+        if top and res[(p, top)]
+    }
 
     retries = defaultdict(int)
     for log in glob.glob(os.path.join(run_dir, "logs", f"{METHOD}-worktree_add-n*-r*-*.log")):
@@ -114,9 +166,28 @@ def load_run(run_dir):
         "phases": phases,
         "cpu": {str(n): median(v) for n, v in sorted(cpu.items())},
         "retries": dict(retries),
+        "resources": resources,
         "failures": {f"{p}@{n}": c for (p, n), c in failures.items()},
         "race": load_race(run_dir, batches, times, ns),
     }
+
+
+def collect_resources(acc, r, samples):
+    """Per-rep resource figures for one phase row: CPU split from the shell's child accounting,
+    machine-wide busy %, RAM and disk from samples.csv. Disk counts until the post-phase sync."""
+    user, sys_ = num(r.get("cpu_user_s")), num(r.get("cpu_sys_s"))
+    if user is not None and sys_ is not None and user + sys_ > 0:
+        acc["cpu_s"].append(user + sys_)
+        acc["kernel_pct"].append(100 * sys_ / (user + sys_))
+    t0, t1, t2 = num(r.get("t_start")), num(r.get("t_end")), num(r.get("t_flushed"))
+    if samples and t0 and t1:
+        w = window(samples, t0, t1)
+        for k in ("busy_pct", "mem_mb"):
+            if k in w:
+                acc[k].append(w[k])
+        flushed = window(samples, t0, t2 or t1)
+        if "disk_mb" in flushed:
+            acc["disk_mb"].append(flushed["disk_mb"])
 
 
 def load_race(run_dir, batches, times, ns):
@@ -191,9 +262,20 @@ def mock_config(cid, rng):
         race["phases"][p] = {"start": round(base, 3), "end": round(end, 3), "agents": agents}
         if p != "remove":
             t = end + 0.3
+    resources = {
+        p: {
+            "busy_pct": round(min(98.0, (35 if family == "apfs" else 55) + rng.uniform(0, 30)), 1),
+            "kernel_pct": round((62 if family in ("apfs", "ntfs") else 38) + rng.uniform(-8, 8), 1),
+            "cpu_s": round(phases[p]["16"] * 6 * rng.uniform(0.6, 1.0), 1),
+            "mem_mb": round(rng.uniform(400, 2500) if p == "install" else rng.uniform(50, 400)),
+            "disk_mb": round(rng.uniform(300, 1200) if p != "remove" else rng.uniform(50, 300)),
+        }
+        for p in ["worktree_add", "install", "remove"]
+    }
     return {
         "ns": ns,
         "phases": phases,
+        "resources": resources,
         "cpu": {str(n): round(4.0 * speed * max(1, n / 6) ** 0.9, 3) for n in ns},
         "retries": {"16": 6} if family in ("apfs", "ntfs") else {},
         "failures": {},
@@ -230,13 +312,17 @@ def main():
         stack_name, family = stack_meta(machine_key, stack)
         run = real.get(cid)
         if run:
-            data = {k: run[k] for k in ["ns", "phases", "cpu", "retries", "failures", "race"]}
+            data = {k: run[k] for k in ["ns", "phases", "cpu", "retries", "failures", "race", "resources"]}
+            if not data["resources"]:
+                data["resources"] = mock_config(cid, rng)["resources"]
+                data["resourcesMock"] = True
             mock = False
             race_mock = run["race"] is None
             if race_mock:
                 data["race"] = mock_config(cid, rng)["race"]
         else:
             data = mock_config(cid, rng)
+            data["resourcesMock"] = True
             mock = race_mock = True
         info = run["info"] if run else {}
         configs.append({

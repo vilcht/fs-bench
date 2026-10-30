@@ -1,10 +1,11 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { type NumberPoll, type Poll, poll } from '../shared/polls'
+import { type Poll, describeRatio, fmtRatio, metricValue, poll } from '../shared/polls'
+import { cfg } from '../shared/data'
 import type { ClientMessage, Cursor, Me, PollView } from '../shared/protocol'
 import { Cursors, useCursorReporter } from './Cursors'
 import { SLIDES, type SlideCtx, type SlideDef, slideHasMock } from './deck'
 import { Stage } from './Stage'
-import { fmtSeconds, fmtTimes } from './theme'
+import { fmtSeconds } from './theme'
 import { useRoom } from './useRoom'
 
 export function App() {
@@ -174,8 +175,7 @@ function Notes() {
 }
 
 function answerText(p: Poll) {
-  if (p.kind === 'choice') return p.options.find((o) => o.id === p.answer)?.label ?? p.answer
-  return p.unit === 's' ? fmtSeconds(p.answer) : fmtTimes(p.answer)
+  return `${fmtRatio(p.answer)} (${fmtSeconds(metricValue(cfg(p.target), p.metric))} vs ${fmtSeconds(metricValue(cfg(p.base), p.metric))})`
 }
 
 function playerId() {
@@ -280,56 +280,59 @@ function VotePanel({
       </div>
     )
   }
+  const base = cfg(p.base)
+  const target = cfg(p.target)
   return (
     <div className="vote">
-      <div className="vote-q">{p.question}</div>
-      {p.kind === 'choice' ? (
-        <div className="vote-options">
-          {p.options.map((o, i) => (
-            <button key={o.id} className={mine === o.id ? 'selected' : ''} onClick={() => send({ t: 'vote', pollId: p.id, value: o.id })}>
-              <span className="letter">{String.fromCharCode(65 + i)}</span>
-              {o.label}
-            </button>
-          ))}
-        </div>
-      ) : (
-        <NumberVote p={p} mine={typeof mine === 'number' ? mine : undefined} onVote={(v) => send({ t: 'vote', pollId: p.id, value: v })} />
-      )}
-      <p className="muted small">You can change your answer until the reveal.</p>
+      <div className="vote-q">
+        {target.machineName} <span className="muted">vs</span> {base.machineName}
+      </div>
+      <div className="vote-known">
+        {base.name}: <b>{fmtSeconds(metricValue(base, p.metric))}</b>
+      </div>
+      <RatioVote key={p.id} p={p} mine={mine} baseValue={metricValue(base, p.metric)} onVote={(v) => send({ t: 'vote', pollId: p.id, value: v })} />
+      <p className="muted small">Your guess is sent as you drag. Change it any time until the reveal.</p>
       {error && <p className="error">{error}</p>}
     </div>
   )
 }
 
-/** Log-scale slider plus a number box, since guesses span orders of magnitude. */
-function NumberVote({ p, mine, onVote }: { p: NumberPoll; mine?: number; onVote: (v: number) => void }) {
-  const [value, setValue] = useState(mine ?? Math.sqrt(p.min * p.max))
-  const pos = (Math.log(value) - Math.log(p.min)) / (Math.log(p.max) - Math.log(p.min))
-  const round = (v: number) => +v.toPrecision(v < 10 ? 2 : 3)
+/** Log-scale multiple slider; sends the guess shortly after the user stops dragging. */
+function RatioVote({ p, mine, baseValue, onVote }: { p: Poll; mine?: number; baseValue: number; onVote: (v: number) => void }) {
+  const [value, setValue] = useState(mine ?? 1)
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const lmin = Math.log(p.min)
+  const lmax = Math.log(p.max)
+  const pos = (Math.log(value) - lmin) / (lmax - lmin)
+  const set = (v: number) => {
+    const rounded = +v.toPrecision(2)
+    setValue(rounded)
+    clearTimeout(timer.current)
+    timer.current = setTimeout(() => onVote(rounded), 250)
+  }
+  useEffect(() => () => clearTimeout(timer.current), [])
+  const synced = mine !== undefined && Math.abs(mine - value) < 1e-9
   return (
-    <div className="number-vote">
-      <div className="number-row">
-        <input
-          type="number"
-          min={p.min}
-          max={p.max}
-          step="any"
-          value={round(value)}
-          onChange={(e) => {
-            const v = Number(e.target.value)
-            if (v > 0) setValue(v)
-          }}
-        />
-        <span className="unit">{p.unit === 's' ? 'seconds' : '× faster'}</span>
+    <div className="ratio-vote">
+      <div className="ratio-readout">{describeRatio(value)}</div>
+      <div className="ratio-seconds">
+        ≈ {fmtSeconds(value * baseValue)} <span className={synced ? 'sent ok' : 'sent'}>{synced ? 'sent' : mine === undefined ? 'not sent yet' : 'sending…'}</span>
       </div>
       <input
         type="range"
         min={0}
         max={1000}
         value={Math.round(Math.min(1, Math.max(0, pos)) * 1000)}
-        onChange={(e) => setValue(round(p.min * (p.max / p.min) ** (Number(e.target.value) / 1000)))}
+        onChange={(e) => set(Math.exp(lmin + (Number(e.target.value) / 1000) * (lmax - lmin)))}
+        aria-label="How many times as long"
       />
-      <button onClick={() => onVote(value)}>{mine === undefined ? 'Lock in' : `Update (now ${round(mine)})`}</button>
+      <div className="ratio-ends">
+        <span>{fmtRatio(p.min)}</span>
+        <span className="ratio-one" style={{ left: `${(-lmin / (lmax - lmin)) * 100}%` }}>
+          1×
+        </span>
+        <span>{fmtRatio(p.max)}</span>
+      </div>
     </div>
   )
 }

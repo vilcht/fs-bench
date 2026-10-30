@@ -237,8 +237,15 @@ machine_info >"$OUT/machine.txt" 2>&1
 cat "$OUT/machine.txt"
 
 # Machine-wide CPU / RAM / disk samples for the whole run; summarize.py slices them per phase.
-# Not on Windows: Git Bash has no /proc/diskstats or iostat.
-if [ "$OS" != Windows ]; then
+if [ "$OS" = Windows ]; then
+  # Git Bash has no /proc or iostat; PowerShell reads the Windows performance counters instead.
+  # A stop file ends it, since killing a native process from Git Bash isn't reliable.
+  STOP_SAMPLER=$OUT/.stop-sampler
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$SCRIPT_DIR/sampler.ps1")" "$(cygpath -w "$STOP_SAMPLER")" \
+    2>"$LOGS/sampler.log" | tr -d '\r' >"$OUT/samples.csv" &
+  SAMPLER=$!
+  trap 'touch "$STOP_SAMPLER"; sleep 2; kill $SAMPLER 2>/dev/null; rm -f "$STOP_SAMPLER"' EXIT
+else
   DISK_DEV=
   [ "$OS" = Darwin ] || DISK_DEV=$(lsblk -ndo KNAME "$(findmnt -no SOURCE -T "$BENCH_DIR" | sed 's/\[.*//')" 2>/dev/null)
   perl "$SCRIPT_DIR/sampler.pl" $DISK_DEV >"$OUT/samples.csv" 2>"$LOGS/sampler.log" &
