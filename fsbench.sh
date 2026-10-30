@@ -118,7 +118,17 @@ job_cpu() { # fixed CPU work, no disk: baseline for hardware speed
     const c = require("crypto"); let h = Buffer.alloc(64);
     for (let i = 0; i < 3e6; i++) h = c.createHash("sha256").update(h).digest();'
 }
-job_worktree() { git -C "$REPO" worktree add --detach "$WT/$1" "$COMMIT"; }
+# Concurrent `git worktree add` can fail reading a sibling's half-created
+# .git/worktrees/<name>/commondir; retry like an agent harness would.
+job_worktree() {
+  local attempt=1
+  until git -C "$REPO" worktree add --force --detach "$WT/$1" "$COMMIT"; do
+    [ $attempt -ge 5 ] && return 1
+    echo "fsbench-retry $attempt"
+    rm -rf "$WT/$1"
+    attempt=$((attempt + 1))
+  done
+}
 job_install() {
   cd "$WT/$1" && pnpm install --offline --frozen-lockfile --ignore-scripts \
     --store-dir "$STORE" --config.confirm-modules-purge=false $(import_flag) &&

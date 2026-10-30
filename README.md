@@ -6,7 +6,7 @@ on the l2beat repo pinned to the same commit on every machine. It also times a C
 (sha256 in Node, no disk), so the results can be normalised by hardware speed.
 
 Results land in `results/<label>-<fs>-<timestamp>/` (`results.csv`, `machine.txt`, `logs/`).
-Rep 0 is a warmup.
+Rep 0 is a warmup. `python3 summarize.py` prints median tables.
 
 Takes roughly 15–60 min per run depending on the machine. Don't use the machine while it runs.
 
@@ -27,21 +27,14 @@ Takes roughly 15–60 min per run depending on the machine. Don't use the machin
 
 ## Linux
 
-The real setup first (the home directory, whatever filesystem it is on):
-
 ```sh
-./fsbench.sh ~/fs-bench-data/home "$(hostname -s)"
+./linux-all.sh "$(hostname -s)"
 ```
 
-Then ext4 / xfs / btrfs on equal footing: same disk, same loop-device overhead.
-
-```sh
-for fs in ext4 xfs btrfs; do
-  sudo ./mkvol.sh up $fs
-  ./fsbench.sh /mnt/fsbench-$fs "$(hostname -s)"
-  sudo ./mkvol.sh down $fs
-done
-```
+This runs the home directory first (the real setup, whatever filesystem it is on), then ext4, xfs and btrfs.
+Each test filesystem lives in an image file on the same disk, so all three carry the same loop-device overhead.
+It asks for sudo once (`mkvol.sh` needs it to mount the volumes). The runs go strictly one after another:
+running two at once makes them slow each other down and invalidates both.
 
 On a laptop, plug it in and set the power profile to performance (`powerprofilesctl set performance`).
 
