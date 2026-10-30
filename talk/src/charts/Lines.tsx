@@ -50,21 +50,21 @@ export function Lines({
   if (overflow > 0) for (const e of ends) e.ly -= overflow
 
   return (
-    <svg width={width} height={height} role="img">
+    <svg width={width} height={height} role="img" className="chart">
       {ticks.map((t) => (
         <g key={t}>
-          <line x1={PAD.left} x2={PAD.left + plotW} y1={yPos(t)} y2={yPos(t)} stroke={t === 0 ? INK.axis : INK.grid} strokeWidth={1} />
-          <text x={PAD.left - 14} y={yPos(t)} textAnchor="end" dominantBaseline="middle" fill={INK.muted} fontSize={18} className="tnum">
+          <line x1={PAD.left} x2={PAD.left + plotW} y1={yPos(t)} y2={yPos(t)} stroke={t === 0 ? INK.axis : INK.grid} strokeWidth={t === 0 ? 2 : 1} />
+          <text x={PAD.left - 14} y={yPos(t)} textAnchor="end" dominantBaseline="middle" className="chart-tick">
             {yFormat(t)}
           </text>
         </g>
       ))}
       {xs.map((x) => (
-        <text key={x} x={xPos(x)} y={PAD.top + plotH + 30} textAnchor="middle" fill={INK.muted} fontSize={20} className="tnum">
+        <text key={x} x={xPos(x)} y={PAD.top + plotH + 34} textAnchor="middle" className="chart-tick">
           {x}
         </text>
       ))}
-      <text x={PAD.left + plotW / 2} y={height - 2} textAnchor="middle" fill={INK.muted} fontSize={18}>
+      <text x={PAD.left + plotW / 2} y={height - 2} textAnchor="middle" className="chart-sub">
         {xLabel}
       </text>
       {series.map((s) => (
@@ -73,22 +73,21 @@ export function Lines({
             points={s.points.map((p) => `${xPos(p.x)},${yPos(p.y)}`).join(' ')}
             fill="none"
             stroke={s.color}
-            strokeWidth={2.5}
-            strokeLinejoin="round"
-            strokeLinecap="round"
+            strokeWidth={4}
+            strokeLinejoin="miter"
           />
           {s.points.map((p) => (
-            <circle key={p.x} cx={xPos(p.x)} cy={yPos(p.y)} r={5} fill={s.color} stroke={INK.surface} strokeWidth={2}>
+            <rect key={p.x} x={xPos(p.x) - 8} y={yPos(p.y) - 8} width={16} height={16} fill={s.color} stroke={INK.void} strokeWidth={3}>
               <title>{`${s.label}, ${p.x} agents: ${yFormat(p.y)}`}</title>
-            </circle>
+            </rect>
           ))}
         </g>
       ))}
       {ends.map((e) => (
         <g key={e.s.id}>
           <line x1={e.x + 8} y1={e.y} x2={e.x + 30} y2={e.ly} stroke={INK.axis} strokeWidth={1} />
-          <circle cx={e.x + 40} cy={e.ly} r={5} fill={e.s.color} />
-          <text x={e.x + 52} y={e.ly} dominantBaseline="middle" fill={INK.primary} fontSize={20}>
+          <rect x={e.x + 34} y={e.ly - 7} width={14} height={14} fill={e.s.color} />
+          <text x={e.x + 58} y={e.ly} dominantBaseline="middle" className="chart-label small">
             {e.s.label}
           </text>
         </g>

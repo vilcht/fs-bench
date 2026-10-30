@@ -9,55 +9,66 @@ export interface BarItem {
   note?: string
 }
 
-const ROW = 72
-const THICK = 24
-const VALUE_W = 190
+const ROW = 84
+const CELL = 24
+const PITCH = 28
+const VALUE_W = 200
 
-/** Horizontal bar with a 4px rounded data end, square at the baseline. */
-export function barPath(x: number, y: number, w: number, h: number) {
-  const r = Math.min(4, w)
-  return `M${x},${y} h${w - r} a${r},${r} 0 0 1 ${r},${r} v${h - 2 * r} a${r},${r} 0 0 1 ${-r},${r} h${-(w - r)} z`
-}
-
+/**
+ * Horizontal bars built from sectors: one run of square cells per item, length rounded to the
+ * nearest cell (the exact value is printed at the tip). With `write`, cells land left to right.
+ */
 export function Bars({
   items,
   width,
   format,
   max,
   labelWidth = 400,
+  write = false,
 }: {
   items: BarItem[]
   width: number
   format: (v: number) => string
   max?: number
   labelWidth?: number
+  write?: boolean
 }) {
-  const LABEL_W = labelWidth
   const top = max ?? Math.max(...items.map((i) => i.value))
-  const plotW = width - LABEL_W - VALUE_W
+  const maxCells = Math.floor((width - labelWidth - VALUE_W) / PITCH)
   const height = items.length * ROW
   return (
-    <svg width={width} height={height} role="img">
-      <line x1={LABEL_W} x2={LABEL_W} y1={0} y2={height} stroke={INK.axis} strokeWidth={1} />
+    <svg width={width} height={height} role="img" className="chart">
       {items.map((item, i) => {
-        const y = i * ROW + (ROW - THICK) / 2
-        const w = Math.max(2, (item.value / top) * plotW)
+        const y = i * ROW + (ROW - CELL) / 2
+        const n = Math.max(1, Math.round((item.value / top) * maxCells))
+        const tip = labelWidth + n * PITCH + 12
         return (
           <g key={item.id}>
             <title>{`${item.label}${item.sub ? ` · ${item.sub}` : ''}: ${format(item.value)}`}</title>
-            <text x={LABEL_W - 20} y={y + THICK / 2 - (item.sub ? 9 : 0)} textAnchor="end" dominantBaseline="middle" fill={INK.primary} fontSize={24} fontWeight={600}>
+            <text x={labelWidth - 24} y={y + CELL / 2 - (item.sub ? 11 : 0)} textAnchor="end" dominantBaseline="middle" className="chart-label">
               {item.label}
             </text>
             {item.sub && (
-              <text x={LABEL_W - 20} y={y + THICK / 2 + 17} textAnchor="end" dominantBaseline="middle" fill={INK.muted} fontSize={18}>
+              <text x={labelWidth - 24} y={y + CELL / 2 + 19} textAnchor="end" dominantBaseline="middle" className="chart-sub">
                 {item.sub}
               </text>
             )}
-            <path d={barPath(LABEL_W + 1, y, w, THICK)} fill={item.color} />
-            <text x={LABEL_W + w + 14} y={y + THICK / 2} dominantBaseline="middle" fill={INK.primary} fontSize={24} fontWeight={600} className="tnum">
+            {Array.from({ length: n }, (_, c) => (
+              <rect
+                key={c}
+                x={labelWidth + c * PITCH}
+                y={y}
+                width={CELL}
+                height={CELL}
+                fill={item.color}
+                className={write ? 'cell-write' : undefined}
+                style={write ? { animationDelay: `${c * 14 + i * 90}ms` } : undefined}
+              />
+            ))}
+            <text x={tip} y={y + CELL / 2} dominantBaseline="middle" className="chart-value">
               {format(item.value)}
               {item.note && (
-                <tspan fill={INK.secondary} fontWeight={400} dx={12}>
+                <tspan className="chart-note" dx={14}>
                   {item.note}
                 </tspan>
               )}
@@ -65,6 +76,7 @@ export function Bars({
           </g>
         )
       })}
+      <line x1={labelWidth - 8} x2={labelWidth - 8} y1={0} y2={height} stroke={INK.axis} strokeWidth={2} />
     </svg>
   )
 }

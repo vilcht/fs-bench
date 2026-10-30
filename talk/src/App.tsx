@@ -1,6 +1,7 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import { type NumberPoll, type Poll, poll } from '../shared/polls'
 import type { ClientMessage, Me, PollView } from '../shared/protocol'
+import { SectorWipe } from './blocks/SectorWipe'
 import { SLIDES, type SlideCtx, type SlideDef, slideHasMock } from './deck'
 import { Stage } from './Stage'
 import { fmtSeconds, fmtTimes } from './theme'
@@ -15,12 +16,29 @@ export function App() {
 
 const joinUrl = () => location.origin
 
-function SlideFrame({ slide, ctx }: { slide: SlideDef; ctx: SlideCtx }) {
+/** Slide plus its chrome: sector-grid backdrop, status rail, transition, mock badge. */
+function SlideFrame({ index, ctx, connected }: { index: number; ctx: SlideCtx; connected: boolean }) {
+  const slide: SlideDef = SLIDES[index]
+  const view = slide.poll ? ctx.state?.polls[slide.poll] : undefined
   return (
-    <>
+    <div className={slide.bleed ? 'frame bleed' : 'frame'}>
       {slide.render(ctx)}
       {slideHasMock(slide) && <div className="mock-badge">Mock data</div>}
-    </>
+      <footer className="rail">
+        <span className="rail-progress" aria-label={`Slide ${index + 1} of ${SLIDES.length}`}>
+          {SLIDES.map((s, i) => (
+            <i key={s.id} className={i < index ? 'done' : i === index ? 'now' : s.poll ? 'poll' : ''} />
+          ))}
+        </span>
+        <span className="rail-title">{slide.title}</span>
+        <span className="rail-stats">
+          {ctx.state?.players ?? 0} players
+          {view && view.status === 'open' && ` · ${view.votes} votes`}
+          <span className={`dot ${connected ? 'ok' : 'bad'}`} />
+        </span>
+      </footer>
+      <SectorWipe trigger={String(index)} />
+    </div>
   )
 }
 
@@ -46,7 +64,6 @@ function Presenter() {
   const key = usePresenterKey()
   const { state, connected, send } = useRoom('presenter', { key })
   const [pos, setPos] = useState<{ slide: number; step: number } | null>(null)
-  const [hud, setHud] = useState(true)
 
   useEffect(() => {
     if (state && !pos) setPos({ slide: clampSlide(state.slide), step: state.step })
@@ -82,8 +99,6 @@ function Presenter() {
       } else if (e.key === 'f') {
         if (document.fullscreenElement) document.exitFullscreen()
         else document.documentElement.requestFullscreen()
-      } else if (e.key === 'h') {
-        setHud((v) => !v)
       } else if (e.key === 'R' && confirm('Reset all votes, players and scores?')) {
         send({ t: 'reset' })
         setPos({ slide: 0, step: 0 })
@@ -95,20 +110,11 @@ function Presenter() {
 
   if (!key) return <Centered>Open /present?key=… with the presenter key.</Centered>
   if (!pos) return <Centered>{connected ? 'Loading…' : 'Connecting… (wrong key?)'}</Centered>
-  const slide = SLIDES[pos.slide]
-  const view = slide.poll ? state?.polls[slide.poll] : undefined
   return (
     <div className="presenter">
       <Stage>
-        <SlideFrame slide={slide} ctx={{ step: pos.step, state, joinUrl: joinUrl() }} />
+        <SlideFrame index={pos.slide} ctx={{ step: pos.step, state, joinUrl: joinUrl() }} connected={connected} />
       </Stage>
-      {hud && (
-        <div className="hud tnum">
-          <span className={`dot ${connected ? 'ok' : 'bad'}`} />
-          {pos.slide + 1}/{SLIDES.length} · {state?.players ?? 0} players
-          {view && ` · ${view.votes} votes`} · H hides
-        </div>
-      )}
     </div>
   )
 }
@@ -143,7 +149,7 @@ function Notes() {
       </div>
       <div className="notes-preview">
         <Stage>
-          <SlideFrame slide={slide} ctx={{ step: state.step, state, joinUrl: joinUrl() }} />
+          <SlideFrame index={i} ctx={{ step: state.step, state, joinUrl: joinUrl() }} connected={connected} />
         </Stage>
       </div>
       <p className="notes-text">{slide.notes}</p>
@@ -186,7 +192,7 @@ function Audience() {
       </header>
       <div className="audience-slide">
         <Stage>
-          <SlideFrame slide={slide} ctx={{ step: state.step, state, joinUrl: joinUrl() }} />
+          <SlideFrame index={clampSlide(state.slide)} ctx={{ step: state.step, state, joinUrl: joinUrl() }} connected={connected} />
         </Stage>
       </div>
       <div className="vote-panel">

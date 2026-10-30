@@ -1,19 +1,23 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Config, Phase } from '../../shared/data'
 import { INK, familyColor, fmtSeconds } from '../theme'
 
-const LABEL_W = 330
-const ROW_H = 3
-const ROW_GAP = 1
-const LANE_GAP = 34
-const FINISH_W = 150
+const LABEL_W = 300
+const FINISH_W = 190
+const CELL = 6
+const PITCH = 8
+const LANE_GAP = 40
+const TOP = 44
+const BOTTOM = 40
 /** Replays are compressed so the slowest lane finishes in about this many seconds. */
 const TARGET_DURATION = 12
+const RES = 2
 
 /**
- * Replays the recorded per-agent timeline of each config: one thin bar per agent, growing in
- * (compressed) real time. Checkout is drawn at half strength, install at full; one time scale for
- * every lane so the race is fair.
+ * Replays each config's recorded per-agent timeline as a sector map: one row of cells per agent,
+ * one column per slice of time. A cell is written once the replay clock passes it and the agent
+ * was busy then; checkout at half strength, install solid. One time scale for every lane, so the
+ * race is fair.
  */
 export function Race({
   configs,
@@ -36,11 +40,29 @@ export function Race({
   })
   const maxEnd = Math.max(...lanes.map((l) => l.end))
   const speed = Math.max(1, maxEnd / TARGET_DURATION)
+  const plotW = width - LABEL_W - FINISH_W
+  const cols = Math.floor(plotW / PITCH)
+  const slice = maxEnd / cols
+  const laneH = (n: number) => n * PITCH
+  let y = TOP
+  const placed = lanes.map((l) => {
+    const top = y
+    y += laneH(l.n) + LANE_GAP
+    return { ...l, top }
+  })
+  const height = y - LANE_GAP + BOTTOM
+  const finishOrder = [...lanes].sort((a, b) => a.end - b.end).map((l) => l.c.id)
+
   const [t, setT] = useState(0)
+  const canvas = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
     if (!playing) {
       setT(0)
+      return
+    }
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setT(maxEnd)
       return
     }
     let raf = 0
@@ -54,78 +76,98 @@ export function Race({
     return () => cancelAnimationFrame(raf)
   }, [playing, speed, maxEnd])
 
-  const plotW = width - LABEL_W - FINISH_W
-  const x = (s: number) => LABEL_W + (s / maxEnd) * plotW
-  const laneH = (n: number) => n * (ROW_H + ROW_GAP)
-  let y = 30
-  const placed = lanes.map((l) => {
-    const top = y
-    y += laneH(l.n) + LANE_GAP
-    return { ...l, top }
+  useEffect(() => {
+    const ctx = canvas.current?.getContext('2d')
+    if (!ctx) return
+    ctx.setTransform(RES, 0, 0, RES, 0, 0)
+    ctx.clearRect(0, 0, plotW, height)
+    const written = Math.floor(t / slice)
+    for (const l of placed) {
+      const color = familyColor(l.c.family)
+      for (let row = 0; row < l.n; row++) {
+        for (let col = 0; col < cols; col++) {
+          const from = col * slice
+          const to = from + slice
+          let phase = -1
+          if (col < written) {
+            l.ph.forEach((p, pi) => {
+              const a = p.agents.find((ag) => ag[0] === row + 1)
+              if (a && a[1] - l.offset < to && a[2] - l.offset > from) phase = pi
+            })
+          }
+          ctx.globalAlpha = phase < 0 ? 1 : phase === l.ph.length - 1 ? 1 : 0.42
+          ctx.fillStyle = phase < 0 ? INK.empty : color
+          ctx.fillRect(col * PITCH, l.top + row * PITCH, CELL, CELL)
+        }
+      }
+      // write head: the column being written right now
+      if (t < l.end && written < cols && playing) {
+        ctx.globalAlpha = 0.9
+        ctx.fillStyle = INK.primary
+        ctx.fillRect(written * PITCH, l.top - 6, CELL, laneH(l.n) + 4)
+      }
+    }
+    ctx.globalAlpha = 1
   })
-  const height = y + 30
-  const finishOrder = [...lanes].sort((a, b) => a.end - b.end).map((l) => l.c.id)
+
   const ticks = niceTicks(maxEnd)
+  const x = (s: number) => LABEL_W + (s / maxEnd) * cols * PITCH
 
   return (
-    <svg width={width} height={height} role="img">
-      <text x={LABEL_W} y={14} fill={INK.secondary} fontSize={20} className="tnum">
-        t = {t.toFixed(1)} s
-      </text>
-      <text x={LABEL_W + plotW} y={14} textAnchor="end" fill={INK.muted} fontSize={18}>
-        replay at {speed.toFixed(speed < 10 ? 1 : 0)}× speed · each line is one agent
-      </text>
-      {ticks.map((tk) => (
-        <g key={tk}>
-          <line x1={x(tk)} x2={x(tk)} y1={26} y2={height - 26} stroke={INK.grid} strokeWidth={1} />
-          <text x={x(tk)} y={height - 4} textAnchor="middle" fill={INK.muted} fontSize={18} className="tnum">
-            {tk} s
+    <div className="race" style={{ width, height }}>
+      <canvas
+        ref={canvas}
+        width={plotW * RES}
+        height={height * RES}
+        style={{ position: 'absolute', left: LABEL_W, top: 0, width: plotW, height }}
+        aria-hidden="true"
+      />
+      <svg width={width} height={height} role="img" className="chart" aria-label="Race replay">
+        <text x={LABEL_W} y={22} className="race-clock">
+          T+{t.toFixed(1)} S
+        </text>
+        <text x={LABEL_W + cols * PITCH} y={22} textAnchor="end" className="chart-sub">
+          {speed.toFixed(speed < 10 ? 1 : 0)}× replay · one row per agent
+        </text>
+        {ticks.map((tk) => (
+          <text key={tk} x={x(tk)} y={height - 8} textAnchor="middle" className="chart-tick">
+            {tk}s
           </text>
-        </g>
-      ))}
-      {placed.map((l) => {
-        const color = familyColor(l.c.family)
-        const done = t >= l.end
-        const place = finishOrder.indexOf(l.c.id) + 1
-        const mid = l.top + laneH(l.n) / 2
-        return (
-          <g key={l.c.id}>
-            <text x={LABEL_W - 20} y={mid - 10} textAnchor="end" dominantBaseline="middle" fill={INK.primary} fontSize={24} fontWeight={600}>
-              {labels?.[l.c.id] ?? l.c.machineName}
-            </text>
-            <text x={LABEL_W - 20} y={mid + 18} textAnchor="end" dominantBaseline="middle" fill={INK.muted} fontSize={18}>
-              {l.c.stackName}
-            </text>
-            {l.ph.map((p, pi) =>
-              p.agents.map(([agent, s, e]) => {
-                const start = s - l.offset
-                const end = Math.min(e - l.offset, t)
-                if (end <= start) return null
-                return (
-                  <rect
-                    key={`${pi}-${agent}`}
-                    x={x(start)}
-                    y={l.top + (agent - 1) * (ROW_H + ROW_GAP)}
-                    width={Math.max(1, x(end) - x(start))}
-                    height={ROW_H}
-                    fill={color}
-                    opacity={pi === l.ph.length - 1 ? 1 : 0.45}
-                  />
-                )
-              }),
-            )}
-            {done && (
-              <text x={x(l.end) + 14} y={mid} dominantBaseline="middle" fill={INK.primary} fontSize={24} fontWeight={700} className="tnum">
-                {fmtSeconds(l.end)}
-                <tspan fill={place === 1 ? INK.good : INK.muted} fontSize={18} fontWeight={600} dx={10}>
-                  {place === 1 ? '1st' : `#${place}`}
-                </tspan>
+        ))}
+        {placed.map((l) => {
+          const done = t >= l.end
+          const place = finishOrder.indexOf(l.c.id) + 1
+          const mid = l.top + laneH(l.n) / 2
+          return (
+            <g key={l.c.id}>
+              <rect x={0} y={mid - 26} width={16} height={16} fill={familyColor(l.c.family)} />
+              <text x={28} y={mid - 12} dominantBaseline="middle" className="chart-label">
+                {labels?.[l.c.id] ?? l.c.machineName}
               </text>
-            )}
-          </g>
-        )
-      })}
-    </svg>
+              <text x={28} y={mid + 18} dominantBaseline="middle" className="chart-sub">
+                {l.c.stackName}
+              </text>
+              {done && (
+                <g className="finish">
+                  {place === 1 && <rect x={LABEL_W + cols * PITCH + 14} y={mid - 22} width={FINISH_W - 20} height={44} fill={INK.primary} />}
+                  <text
+                    x={LABEL_W + cols * PITCH + 28}
+                    y={mid}
+                    dominantBaseline="middle"
+                    className={place === 1 ? 'race-time winner' : 'race-time'}
+                  >
+                    {fmtSeconds(l.end)}
+                    <tspan dx={10} className="race-place">
+                      {place === 1 ? '1ST' : `#${place}`}
+                    </tspan>
+                  </text>
+                </g>
+              )}
+            </g>
+          )
+        })}
+      </svg>
+    </div>
   )
 }
 
