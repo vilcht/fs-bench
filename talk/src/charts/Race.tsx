@@ -4,11 +4,11 @@ import { INK, familyColor, fmtSeconds } from '../theme'
 
 const LABEL_W = 300
 const FINISH_W = 190
-const CELL = 6
-const PITCH = 8
-const LANE_GAP = 40
-const TOP = 44
-const BOTTOM = 40
+const CELL = 5
+const PITCH = 6
+const LANE_GAP = 26
+const TOP = 40
+const BOTTOM = 34
 /** Replays are compressed so the slowest lane finishes in about this many seconds. */
 const TARGET_DURATION = 12
 const RES = 2
