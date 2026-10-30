@@ -71,7 +71,7 @@ for path in glob.glob(os.path.join(root, "*", "results.csv")):
     for r in csv.DictReader(open(path)):
         if r["rep"] == "0" or r["phase"] == "store_warm":
             continue
-        key = (r["label"], r["fs"], r["spotlight"], r["method"], r["phase"], int(r["n"]))
+        key = (r["label"], r["fs"], r.get("scanner") or r.get("spotlight"), r["method"], r["phase"], int(r["n"]))
         if r["ok"] != "1":
             failures[key] += 1
             continue
@@ -109,7 +109,7 @@ def row(name, vals, fmt="{:>9.2f}"):
 for cfg in configs:
     label, fs, spot, method = cfg
     ns = sorted({k[5] for k in med if k[:4] == cfg})
-    print(f"\n{label}  fs={fs}  spotlight={spot}  method={method}")
+    print(f"\n{label}  fs={fs}  scanner={spot}  method={method}")
     print(f"  {'phase (seconds)':<24}" + "".join(f"{'n=' + str(n):>9}" for n in ns))
     for p in PHASES:
         print(row(p, [get(cfg, p, n) for n in ns]))
@@ -143,7 +143,7 @@ for k, c in sorted(failures.items()):
 
 with open(os.path.join(root, "summary.json"), "w") as f:
     json.dump(
-        [dict(zip(["label", "fs", "spotlight", "method", "phase", "n"], k), **v) for k, v in sorted(med.items())],
+        [dict(zip(["label", "fs", "scanner", "method", "phase", "n"], k), **v) for k, v in sorted(med.items())],
         f,
         indent=1,
     )

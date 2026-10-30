@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Filesystem benchmark for "many agents in parallel" workflows on the l2beat repo.
-# Runs on Linux and macOS (bash 3.2 compatible).
+# Runs on Linux (incl. WSL), macOS (bash 3.2 compatible) and Windows (Git Bash).
 #
 #   ./fsbench.sh <bench-dir> [label]
 #
@@ -11,9 +11,11 @@
 #   REPS     measured repetitions per configuration   (default 3, plus 1 warmup)
 #   METHODS  pnpm import methods: auto hardlink copy  (default "auto hardlink")
 set -u
+# A comma decimal separator (e.g. pl_PL) would break EPOCHREALTIME arithmetic.
+export LC_ALL=C
 
 BENCH_DIR=${1:?usage: fsbench.sh <bench-dir> [label]}
-LABEL=${2:-$(hostname -s)}
+LABEL=${2:-$(hostname | cut -d. -f1)}
 SOURCE=${SOURCE:-https://github.com/l2beat/l2beat.git}
 COMMIT=${COMMIT:-e91c7052327199d7bef160c7f1ef731760c2bc35}
 NS=${NS:-"1 2 4 8 16"}
@@ -22,6 +24,7 @@ METHODS=${METHODS:-"auto hardlink"}
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 OS=$(uname -s)
+case "$OS" in MINGW* | MSYS* | CYGWIN*) OS=Windows ;; esac
 mkdir -p "$BENCH_DIR"
 BENCH_DIR=$(cd "$BENCH_DIR" && pwd)
 REPO=$BENCH_DIR/repo
@@ -34,16 +37,24 @@ ulimit -n 65536 2>/dev/null || ulimit -n 10240 2>/dev/null || true
 die() { echo "error: $*" >&2; exit 1; }
 for bin in git node pnpm; do command -v $bin >/dev/null || die "$bin not found"; done
 
+# Sets STAMP without forking where possible: forks are slow on Windows and would skew timings.
 if [ -n "${EPOCHREALTIME:-}" ]; then
   now() { echo "$EPOCHREALTIME"; }
+  stamp() { STAMP=$EPOCHREALTIME; }
 elif command -v perl >/dev/null; then
   now() { perl -MTime::HiRes=time -e 'printf "%.3f\n", time'; }
 else
   now() { node -e 'console.log((Date.now() / 1000).toFixed(3))'; }
 fi
+command -v stamp >/dev/null || stamp() { STAMP=$(now); }
+
+# PowerShell one-off for Windows details that Git Bash can't see.
+winps() { powershell.exe -NoProfile -NonInteractive -Command "$1" 2>/dev/null | tr -d '\r'; }
 
 fs_type() {
-  if [ "$OS" = Darwin ]; then
+  if [ "$OS" = Windows ]; then
+    winps "(Get-Volume -FilePath '$(cygpath -w "$1")').FileSystemType"
+  elif [ "$OS" = Darwin ]; then
     diskutil info "$(df -P "$1" | tail -1 | awk '{print $1}')" |
       awk -F: '/Type \(Personality\)/ { gsub(/^ +/, "", $2); print $2 }'
   else
@@ -52,24 +63,50 @@ fs_type() {
 }
 
 FS=$(fs_type "$BENCH_DIR" | tr ' ' '_')
-case "$BENCH_DIR" in *.noindex*) SPOTLIGHT=off ;; *) SPOTLIGHT=on ;; esac
-[ "$OS" = Darwin ] || SPOTLIGHT=n/a
+# What scans every new file behind the filesystem's back: Spotlight on macOS (skipped for
+# *.noindex directories), Defender real-time protection on Windows.
+case "$OS" in
+Darwin) case "$BENCH_DIR" in *.noindex*) SCANNER=spotlight-off ;; *) SCANNER=spotlight-on ;; esac ;;
+Windows)
+  case "$(winps '(Get-MpComputerStatus).RealTimeProtectionEnabled')" in
+  True) SCANNER=defender-on ;; False) SCANNER=defender-off ;; *) SCANNER=defender-unknown ;;
+  esac
+  ;;
+*) SCANNER=none ;;
+esac
 
 OUT=$SCRIPT_DIR/results/$LABEL-$FS-$(date +%Y%m%d-%H%M%S)
 LOGS=$OUT/logs
 mkdir -p "$LOGS"
 CSV=$OUT/results.csv
-echo "label,os,fs,spotlight,method,phase,n,rep,seconds,ok,t_start,t_end,t_flushed,cpu_user_s,cpu_sys_s" >"$CSV"
+echo "label,os,fs,scanner,method,phase,n,rep,seconds,ok,t_start,t_end,t_flushed,cpu_user_s,cpu_sys_s" >"$CSV"
+AGENTS=$OUT/agents.csv
+echo "label,os,fs,scanner,method,phase,n,rep,agent,t_start,t_end,ok" >"$AGENTS"
 
 machine_info() {
   echo "label: $LABEL"
   echo "bench_dir: $BENCH_DIR"
   echo "fs: $FS"
-  echo "spotlight: $SPOTLIGHT"
+  echo "scanner: $SCANNER"
   echo "commit: $COMMIT"
   echo "node: $(node -v)  pnpm: $(cd "$REPO" && pnpm -v)  $(git --version)"
   echo "uname: $(uname -a)"
-  if [ "$OS" = Darwin ]; then
+  if [ "$OS" = Windows ]; then
+    winps "
+      'cpu: ' + (Get-CimInstance Win32_Processor).Name
+      'cores: ' + \$env:NUMBER_OF_PROCESSORS
+      'mem_bytes: ' + (Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory
+      \$os = Get-CimInstance Win32_OperatingSystem; 'windows: ' + \$os.Caption + ' build ' + \$os.BuildNumber
+      \$v = Get-Volume -FilePath '$(cygpath -w "$BENCH_DIR")'
+      'volume: ' + \$v.DriveLetter + ': ' + \$v.FileSystemType + ' ' + \$v.FileSystemLabel
+      'dev_drive: ' + ((fsutil devdrv query (\$v.DriveLetter + ':') 2>&1) -join ' ')
+      'defender_realtime: ' + (Get-MpComputerStatus).RealTimeProtectionEnabled
+      'bitlocker: ' + ((Get-BitLockerVolume -MountPoint (\$v.DriveLetter + ':') -ErrorAction SilentlyContinue).ProtectionStatus)
+      Get-PhysicalDisk | ForEach-Object { 'disk: ' + \$_.FriendlyName + ' ' + \$_.MediaType + ' ' + \$_.BusType }
+      'power: ' + (powercfg /getactivescheme)
+      'ac_online: ' + (Get-CimInstance -ClassName BatteryStatus -Namespace root/wmi -ErrorAction SilentlyContinue).PowerOnline
+    "
+  elif [ "$OS" = Darwin ]; then
     sw_vers
     echo "cpu: $(sysctl -n machdep.cpu.brand_string)"
     echo "cores: $(sysctl -n hw.ncpu) (perf: $(sysctl -n hw.perflevel0.physicalcpu 2>/dev/null), eff: $(sysctl -n hw.perflevel1.physicalcpu 2>/dev/null))"
@@ -87,10 +124,11 @@ machine_info() {
     lsblk -no NAME,MODEL,FSTYPE "$(findmnt -no SOURCE -T "$BENCH_DIR" | sed 's/\[.*//')" 2>/dev/null
     cat /sys/firmware/acpi/platform_profile 2>/dev/null | sed 's/^/platform_profile: /'
     cat /sys/class/power_supply/AC*/online 2>/dev/null | sed 's/^/ac_online: /'
+    grep -qi microsoft /proc/version && echo "wsl: yes"
   fi
 }
 record() { # method phase n rep seconds ok t_start t_end t_flushed cpu_user_s cpu_sys_s
-  echo "$LABEL,$OS,$FS,$SPOTLIGHT,$1,$2,$3,$4,$5,$6,${7:-},${8:-},${9:-},${10:-},${11:-}" >>"$CSV"
+  echo "$LABEL,$OS,$FS,$SCANNER,$1,$2,$3,$4,$5,$6,${7:-},${8:-},${9:-},${10:-},${11:-}" >>"$CSV"
   printf '  %-9s %-14s n=%-2s rep=%s  %8.2fs %s\n' "$1" "$2" "$3" "$4" "$5" "$([ "$6" = 1 ] || echo FAILED)"
 }
 
@@ -101,25 +139,50 @@ child_cpu() {
   CHILD_CPU=$(tail -1 "$OUT/.times" | awk '{ for (i = 1; i <= 2; i++) { split($i, a, "m"); sub("s", "", a[2]); printf "%.3f ", a[1] * 60 + a[2] } }')
 }
 
-# Runs `$fn i` for i in 1..n concurrently and records the wall time of the batch. The sync
-# afterwards isn't part of the wall time, but its window still counts for disk traffic.
+flush() { sync 2>/dev/null || true; }
+
+# One agent: runs `fn i` and writes "start end exit-code" to `file`.
+run_agent() { # fn i file
+  local a rc
+  stamp
+  a=$STAMP
+  "$1" "$2"
+  rc=$?
+  stamp
+  echo "$a $STAMP $rc" >"$3"
+  return $rc
+}
+
+# Runs `$fn i` for i in 1..n concurrently and records the wall time of the batch, plus each
+# agent's own start and end in agents.csv. The sync afterwards isn't part of the wall time, but
+# its window still counts for disk traffic.
 run_parallel() { # method phase n rep fn
-  local method=$1 phase=$2 n=$3 rep=$4 fn=$5 i pids="" ok=1 t0 t1 t2 c0 c1
+  local method=$1 phase=$2 n=$3 rep=$4 fn=$5 i pids="" ok=1 t0 t1 t2 c0 c1 a b rc
   child_cpu
   c0=$CHILD_CPU
-  t0=$(now)
+  stamp
+  t0=$STAMP
   i=1
   while [ $i -le $n ]; do
-    "$fn" $i >"$LOGS/$method-$phase-n$n-r$rep-$i.log" 2>&1 &
+    run_agent "$fn" $i "$OUT/.agent-$i" >"$LOGS/$method-$phase-n$n-r$rep-$i.log" 2>&1 &
     pids="$pids $!"
     i=$((i + 1))
   done
   for p in $pids; do wait $p || ok=0; done
-  t1=$(now)
+  stamp
+  t1=$STAMP
   child_cpu
   c1=$CHILD_CPU
-  sync
-  t2=$(now)
+  flush
+  stamp
+  t2=$STAMP
+  i=1
+  while [ $i -le $n ]; do
+    read -r a b rc <"$OUT/.agent-$i"
+    echo "$LABEL,$OS,$FS,$SCANNER,$method,$phase,$n,$rep,$i,$a,$b,$([ "$rc" = 0 ] && echo 1 || echo 0)" >>"$AGENTS"
+    rm -f "$OUT/.agent-$i"
+    i=$((i + 1))
+  done
   record "$method" "$phase" "$n" "$rep" "$(awk "BEGIN{print $t1 - $t0}")" $ok "$t0" "$t1" "$t2" \
     $(echo "$c0 $c1" | awk '{ printf "%.3f %.3f", $3 - $1, $4 - $2 }')
 }
@@ -156,7 +219,7 @@ cleanup_worktrees() {
   [ -d "$WT" ] && chmod -R u+w "$WT" 2>/dev/null && rm -rf "$WT"
   git -C "$REPO" worktree prune
   mkdir -p "$WT"
-  sync
+  flush
 }
 
 echo
@@ -165,6 +228,7 @@ if [ ! -d "$REPO/.git" ]; then
   src=$SOURCE
   [ -d "$src" ] && src="file://$(cd "$src" && pwd)"
   git init -q "$REPO" &&
+    git -C "$REPO" config core.longpaths true &&
     git -C "$REPO" fetch -q --depth 1 "$src" "$COMMIT" &&
     git -C "$REPO" checkout -q --detach FETCH_HEAD || die "could not fetch $COMMIT from $SOURCE"
 fi
@@ -173,11 +237,14 @@ machine_info >"$OUT/machine.txt" 2>&1
 cat "$OUT/machine.txt"
 
 # Machine-wide CPU / RAM / disk samples for the whole run; summarize.py slices them per phase.
-DISK_DEV=
-[ "$OS" = Darwin ] || DISK_DEV=$(lsblk -ndo KNAME "$(findmnt -no SOURCE -T "$BENCH_DIR" | sed 's/\[.*//')")
-perl "$SCRIPT_DIR/sampler.pl" $DISK_DEV >"$OUT/samples.csv" 2>"$LOGS/sampler.log" &
-SAMPLER=$!
-trap 'kill $SAMPLER 2>/dev/null' EXIT
+# Not on Windows: Git Bash has no /proc/diskstats or iostat.
+if [ "$OS" != Windows ]; then
+  DISK_DEV=
+  [ "$OS" = Darwin ] || DISK_DEV=$(lsblk -ndo KNAME "$(findmnt -no SOURCE -T "$BENCH_DIR" | sed 's/\[.*//')" 2>/dev/null)
+  perl "$SCRIPT_DIR/sampler.pl" $DISK_DEV >"$OUT/samples.csv" 2>"$LOGS/sampler.log" &
+  SAMPLER=$!
+  trap 'kill $SAMPLER 2>/dev/null' EXIT
+fi
 
 echo "== setup: warm pnpm store (network, not part of the comparison)"
 t0=$(now)
