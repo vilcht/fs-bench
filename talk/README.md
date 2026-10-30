@@ -1,8 +1,13 @@
 # Talk: 16 agents, one SSD
 
 One-off site for the knowledge-sharing session: slides and live voting in one place.
-The presenter drives the slides; everyone who opens the site follows along and votes when a poll opens.
-Scores go to a leaderboard.
+The presenter drives the slides; everyone who opens the site follows along, their mouse cursors show up
+live on everyone's slide, and they vote when a round opens.
+
+Every vote is a higher/lower round (`shared/polls.ts`): one machine's time is known, the next machine is
+shown, and everyone drags a log slider (0.5×–3×, widened when the answer is near an end) for how many times
+as long it takes. Exact guess = 1000 points, 2.5× off = 0. The reveal shows the real multiple, all guesses,
+and the three closest players. Scores go to a leaderboard.
 
 - `/`: audience (pick a name, follow the slides, vote)
 - `/present?key=…`: presenter. The key is removed from the address bar after load, so it never shows on screen share.

@@ -53,8 +53,8 @@ curl -fsSL https://raw.githubusercontent.com/vilcht/fs-bench/main/run.sh | NS=1 
    Every agent's own start and end time goes to `agents.csv`, so runs can be replayed as a race.
 
    Each phase records wall time, plus user and kernel CPU-seconds of all its processes.
-   A background sampler (`sampler.pl`) logs machine-wide CPU %, iowait (Linux), RAM in use, file cache,
-   and disk MB/s to `samples.csv`. `summarize.py` slices it per phase. Disk traffic counts until
+   A background sampler (`sampler.pl`; `sampler.ps1` on Windows) logs machine-wide CPU %, iowait (Linux),
+   RAM in use, file cache, and disk MB/s to `samples.csv`. `summarize.py` slices it per phase. Disk traffic counts until
    the `sync` after each phase finishes, so buffered writes aren't missed. The sync isn't part of the wall time.
 
    Each runs with pnpm's default import method (`auto`: clone → hardlink → copy) and with
