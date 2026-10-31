@@ -21,6 +21,17 @@ def num(s):
     return float(s) if s not in (None, "") else None
 
 
+def site_of(run_dir):
+    """'volume' for the Linux test volumes (/mnt/fsbench-<fs>), 'home' otherwise, so a btrfs home
+    disk and a btrfs test volume on the same machine stay separate configs."""
+    path = os.path.join(run_dir, "machine.txt")
+    if os.path.exists(path):
+        for line in open(path, errors="replace"):
+            if line.startswith("bench_dir:"):
+                return "volume" if line.split(":", 1)[1].strip().startswith("/mnt/fsbench-") else "home"
+    return "home"
+
+
 def load_samples(path):
     if not os.path.exists(path):
         return []
@@ -68,10 +79,11 @@ metrics = defaultdict(lambda: defaultdict(list))  # key -> metric -> values acro
 failures = defaultdict(int)
 for path in glob.glob(os.path.join(root, "*", "results.csv")):
     samples = load_samples(os.path.join(os.path.dirname(path), "samples.csv"))
+    site = site_of(os.path.dirname(path))
     for r in csv.DictReader(open(path)):
         if r["rep"] == "0" or r["phase"] == "store_warm":
             continue
-        key = (r["label"], r["fs"], r.get("scanner") or r.get("spotlight"), r["method"], r["phase"], int(r["n"]))
+        key = (r["label"], r["fs"], site, r.get("scanner") or r.get("spotlight"), r["method"], r["phase"], int(r["n"]))
         if r["ok"] != "1":
             failures[key] += 1
             continue
@@ -95,7 +107,7 @@ for path in glob.glob(os.path.join(root, "*", "results.csv")):
                 m["flush_s"].append(t2 - t1)
 
 med = {k: {name: statistics.median(vs) for name, vs in m.items()} for k, m in metrics.items()}
-configs = sorted({k[:4] for k in med if k[3] != "-"})
+configs = sorted({k[:5] for k in med if k[4] != "-"})
 
 
 def get(cfg, phase, n, name="seconds"):
@@ -107,9 +119,9 @@ def row(name, vals, fmt="{:>9.2f}"):
 
 
 for cfg in configs:
-    label, fs, spot, method = cfg
-    ns = sorted({k[5] for k in med if k[:4] == cfg})
-    print(f"\n{label}  fs={fs}  scanner={spot}  method={method}")
+    label, fs, site, spot, method = cfg
+    ns = sorted({k[6] for k in med if k[:5] == cfg})
+    print(f"\n{label}  fs={fs}  site={site}  scanner={spot}  method={method}")
     print(f"  {'phase (seconds)':<24}" + "".join(f"{'n=' + str(n):>9}" for n in ns))
     for p in PHASES:
         print(row(p, [get(cfg, p, n) for n in ns]))
@@ -117,7 +129,7 @@ for cfg in configs:
     print(row("setup (wt+install)", setup))
     print(row("setup per agent", [s / n for s, n in zip(setup, ns)]))
     print(row("slowdown vs n=1", [s / setup[0] for s in setup]))
-    cpu_cfg = (label, fs, spot, "-")
+    cpu_cfg = (label, fs, site, spot, "-")
     if get(cpu_cfg, "cpu", ns[0]):
         print(row("cpu baseline", [get(cpu_cfg, "cpu", n) for n in ns]))
 
@@ -143,7 +155,7 @@ for k, c in sorted(failures.items()):
 
 with open(os.path.join(root, "summary.json"), "w") as f:
     json.dump(
-        [dict(zip(["label", "fs", "scanner", "method", "phase", "n"], k), **v) for k, v in sorted(med.items())],
+        [dict(zip(["label", "fs", "site", "scanner", "method", "phase", "n"], k), **v) for k, v in sorted(med.items())],
         f,
         indent=1,
     )
