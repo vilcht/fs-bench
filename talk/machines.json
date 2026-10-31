@@ -4,8 +4,8 @@
     {
       "key": "macbook",
       "name": "MacBook",
-      "detail": "Apple M? · ? GB",
-      "labels": ["macbook"]
+      "detail": "MacBook Air · Apple M4 · 16 GB",
+      "labels": ["macbook", "apple-m4-macos"]
     },
     {
       "key": "macmini",
