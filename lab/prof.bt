@@ -1,0 +1,12 @@
+// Generated. On-CPU kernel stacks (499 Hz) and off-CPU voluntary sleep time by kernel stack, for git and
+// pnpm 12's native installer threads (pnpm-native / pacquet-* / tokio-rt-*).
+profile:hz:499 /(strncmp(comm, "git", 3) == 0 || strncmp(comm, "pnpm-native", 11) == 0 || strncmp(comm, "pacquet", 7) == 0 || strncmp(comm, "tokio-rt", 8) == 0)/ { @on[kstack(14)] = count(); @onall = count(); }
+tracepoint:sched:sched_switch {
+  if (args.prev_state != 0 && (strncmp(args.prev_comm, "git", 3) == 0 || strncmp(args.prev_comm, "pnpm-native", 11) == 0 || strncmp(args.prev_comm, "pacquet", 7) == 0 || strncmp(args.prev_comm, "tokio-rt", 8) == 0)) { @t[args.prev_pid] = nsecs; @s[args.prev_pid] = kstack(14); }
+  if (@t[args.next_pid] != 0) {
+    @off[@s[args.next_pid]] = sum((nsecs - @t[args.next_pid]) / 1000);
+    @offall = sum((nsecs - @t[args.next_pid]) / 1000);
+    delete(@t, args.next_pid); delete(@s, args.next_pid);
+  }
+}
+END { clear(@t); clear(@s); }

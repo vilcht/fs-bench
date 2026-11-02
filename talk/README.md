@@ -1,6 +1,6 @@
 # Talk: 16 agents, one SSD
 
-One-off site for the knowledge-sharing session: slides and live voting in one place.
+One-off site for the knowledge-sharing session: slides and live voting in one place. The spoken script, with the technical background for every slide, is in [`SCRIPT.md`](SCRIPT.md).
 The presenter drives the slides; everyone who opens the site follows along, their mouse cursors show up
 live on everyone's slide, and they vote when a round opens.
 
@@ -15,6 +15,21 @@ and the three closest players. Scores go to a leaderboard.
 
 Presenter keys: `→` / `Space` / `PageDown` next (on a poll slide: first press reveals),
 `←` / `PageUp` back, `F` fullscreen, `Shift+R` reset all votes and players.
+
+## Practice
+
+Quickest: open `/notes-draft`. No key, no live room: the slides, what to say, the answers and a timer against
+the planned time per slide. → / Space next (rounds reveal first), ← back, `R` restart. Nothing you do there
+reaches the audience.
+
+To rehearse the real setup:
+
+1. Presenter view on the screen you'll share: `/present?key=…` (arrow keys, `F` fullscreen).
+2. Speaker notes on a second screen: `/notes?key=…` (current slide, what to say, the answer, a timer).
+3. Your phone on `/` to see what the audience sees.
+4. A fake audience, so rounds have votes and cursors: `node scripts/fake-audience.mjs <url> 8 20`
+   (8 bots for 20 minutes).
+5. Afterwards press `Shift+R` in the presenter view to clear the bots and votes.
 
 ## Data
 
@@ -40,7 +55,9 @@ pnpm dev    # http://localhost:5173, presenter at /present?key=dev
 ```sh
 pnpm exec wrangler login
 pnpm exec wrangler secret put PRESENTER_KEY
-pnpm deploy
+pnpm run deploy   # not `pnpm deploy`: that's pnpm's own built-in command
 ```
+
+Live at https://fs-bench-talk.terenoewt.workers.dev (presenter: `/present?key=…`, notes: `/notes?key=…`).
 
 Live state (slide, votes, players) lives in one Durable Object. Press `Shift+R` before the talk to clear test votes.

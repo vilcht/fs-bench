@@ -1,13 +1,13 @@
 import { Fragment, type ReactNode } from 'react'
-import { type Config, NS, type Resources, cfg, configs, phaseTime, setupTime } from '../shared/data'
+import { type Config, cfg, configs, setupTime } from '../shared/data'
 import { METRIC_LABEL, POLLS, type Poll, ZERO_AT, describeRatio, fmtRatio, metricValue, poll } from '../shared/polls'
 import type { RoomState } from '../shared/protocol'
 import { BlockText } from './blocks/BlockText'
 import { SectorField } from './blocks/SectorField'
 import { Bars } from './charts/Bars'
 import { Guesses } from './charts/Guesses'
-import { Lines } from './charts/Lines'
 import { Race } from './charts/Race'
+import { Scatter } from './charts/Scatter'
 import { JoinCard } from './JoinCard'
 import { INK, familyColor, fmtSeconds } from './theme'
 
@@ -23,6 +23,8 @@ export interface SlideDef {
   /** Poll slides have two steps: 0 = voting open, 1 = revealed. */
   poll?: string
   notes: string
+  /** Target speaking time, from SCRIPT.md. */
+  seconds?: number
   /** Config ids drawn on the slide; any mock among them puts a MOCK DATA badge on it. */
   sources?: string[]
   /** Full-bleed slides draw their own background. */
@@ -36,27 +38,55 @@ const REPO_URL = 'github.com/vilcht/fs-bench'
 const W = 1408 // content width inside the slide padding
 
 const RACE_LABELS: Record<string, string> = {
-  'macbook:apfs': 'MacBook · macOS',
-  'desktop:ext4': 'Desktop · Linux',
-  'huawei:home-ext4': 'Huawei · Linux',
-  'desktop-win:ntfs': 'Desktop · Windows',
+  'huawei:ext4': 'Laptop · Linux ext4',
+  'huawei:home-btrfs': 'Laptop · Linux btrfs',
+  'macbook:apfs': 'MacBook Air · macOS',
+  'huawei-win:ntfs': 'Laptop · Windows',
 }
 
-const RACE = ['desktop:ext4', 'huawei:home-ext4', 'macbook:apfs', 'desktop-win:ntfs']
-const RESOURCE_ROWS = ['desktop:ext4', 'huawei:home-ext4', 'macbook:apfs', 'macmini:apfs', 'desktop-win:ntfs', 'desktop-win:devdrive', 'desktop-wsl:home-ext4']
-const SCALING = ['macbook:apfs', 'macmini:apfs', 'desktop:ext4', 'huawei:home-ext4', 'desktop-win:ntfs']
-const LINUX_FS = ['desktop:ext4', 'desktop:xfs', 'desktop:btrfs']
+const RACE = ['huawei:ext4', 'huawei:home-btrfs', 'macbook:apfs', 'huawei-win:ntfs']
+// strace -f -c on one agent (lab/results/strace-*.txt).
+const SYSCALLS: { step: string; total: string; parts: [string, string][] }[] = [
+  { step: 'git worktree add', total: '97K', parts: [['12k', 'files written'], ['3.5k', 'folders created']] },
+  { step: 'pnpm install', total: '202K', parts: [['53k', 'file links'], ['7.8k', 'folders created']] },
+  { step: 'git worktree remove', total: '215K', parts: [['68k', 'files deleted'], ['10.7k', 'folders deleted']] },
+]
+
+const SCATTER: { id: string; label: string; sub?: string; anchor?: 'right' | 'left' | 'above' | 'below' | 'below-left' }[] = [
+  { id: 'huawei:ext4', label: 'Linux ext4', sub: 'cheap and parallel', anchor: 'right' },
+  { id: 'huawei:home-btrfs', label: 'Linux btrfs', sub: 'agents wait in line', anchor: 'below' },
+  { id: 'macbook:apfs', label: 'macOS', sub: 'every file is expensive', anchor: 'right' },
+  { id: 'huawei-win:ntfs', label: 'Windows', sub: 'both', anchor: 'below-left' },
+]
+
+// lab/machine_load.py: machine-wide CPU while 16 agents create, install and delete (whole computer, incl. the OS
+// and Defender). busyFor = seconds of the whole computer at 100%.
+const LOAD: { id: string; label: string; busyFor: number; wall: number; avg: number; peak: number }[] = [
+  { id: 'huawei:ext4', label: 'Linux ext4', busyFor: 4.5, wall: 6.9, avg: 65, peak: 93 },
+  { id: 'huawei:home-btrfs', label: 'Linux btrfs', busyFor: 13.8, wall: 38, avg: 36, peak: 87 },
+  { id: 'macbook:apfs', label: 'MacBook', busyFor: 52.7, wall: 77.5, avg: 68, peak: 100 },
+  { id: 'huawei-win:ntfs', label: 'Windows', busyFor: 233, wall: 463, avg: 50, peak: 89 },
+]
+
+const ERAS: [string, string][] = [
+  ['Files are precious: protect every one', 'node_modules is disposable: regenerated in seconds'],
+  ['One person, one task at a time', '16 agents, ~950 threads at once'],
+  ['Files change now and then', 'Millions of tiny files created and deleted per hour'],
+]
 
 export const SLIDES: SlideDef[] = [
   {
     id: 'title',
     title: 'Title',
     bleed: true,
-    notes: 'Hi! 10 minutes on why the machine you run agents on matters more than you think. Join on your phone or laptop now: there are points to win.',
+    notes:
+      "\"Ten minutes on why the machine you run coding agents on matters more than you think. Scan the code, there's a game with points.\"",
+    seconds: 25,
     render: ({ state, joinUrl }) => (
       <div className="slide bleed">
-        <SectorField title={'16 AGENTS\nONE SSD'} col={4} row={4} />
+        <SectorField title={'ON\nWORKTREES'} col={4} row={4} />
         <p className="title-sub">
+          <span className="title-and">and filesystems</span>
           Every coding agent wants its own copy of the repo. What happens to your machine when sixteen of them start at once?
         </p>
         <JoinCard url={joinUrl} players={state?.players ?? 0} />
@@ -67,7 +97,8 @@ export const SLIDES: SlideDef[] = [
     id: 'workflow',
     title: 'One agent, one worktree',
     notes:
-      'Each agent gets a git worktree so they do not step on each other. Each worktree needs its own node_modules. Every square here is a thousand files. Tiny files are exactly what filesystems are worst at.',
+      "\"Every agent gets its own copy of the repo and runs pnpm install in it. Each square is a thousand files. Sixteen agents: over a million files created and deleted.\"",
+    seconds: 25,
     render: () => (
       <div className="slide">
         <h2>One agent = one worktree = one install</h2>
@@ -106,14 +137,13 @@ export const SLIDES: SlideDef[] = [
     id: 'lineup',
     title: 'The lineup',
     notes:
-      'Same l2beat commit, same Node and pnpm everywhere, offline installs from a warm store, so the network is out of the picture. 1, 2, 4, 8 and 16 agents at once, three reps each, median. Plus a CPU-only baseline so we can tell slow disks from slow CPUs.',
+      "\"One laptop, dual-booted Linux and Windows: same CPU, same SSD. Plus a MacBook Air. Same repo, same tools, offline installs.\"",
+    seconds: 15,
     render: () => {
       const machines = [...new Map(configs.map((c) => [c.machine, c])).values()]
       return (
         <div className="slide">
-          <h2>
-            {machines.length} machines, {configs.length} setups. Same repo, same commit, same tools.
-          </h2>
+          <h2>One laptop, two operating systems. And a MacBook.</h2>
           <ul className="lineup">
             {machines.map((m) => (
               <li key={m.machine}>
@@ -132,7 +162,10 @@ export const SLIDES: SlideDef[] = [
               </li>
             ))}
           </ul>
-          <p className="footnote">Checkout → install → status → delete, with 1, 2, 4, 8 and 16 agents at once. Offline installs, median of 3 runs.</p>
+          <p className="footnote">
+            Same repo, commit, Node and pnpm. Checkout → install → status → delete, with 1, 2, 4, 8 and 16 agents at once. Offline installs. Median of 3
+            runs (Windows: 1 run, it took over an hour).
+          </p>
         </div>
       )
     },
@@ -140,214 +173,281 @@ export const SLIDES: SlideDef[] = [
   {
     id: 'how-to-play',
     title: 'How to play',
-    notes: 'Explain the slider once: we show one result, then the next machine. Guess how many times as long it takes. 1x same, 0.5x twice as fast, 3x three times as long. Closest guesses get the most points; 2.5x off gets nothing.',
+    notes:
+      "\"You see one result, then guess how many times as long the next one takes. Closest guess, most points.\"",
+    seconds: 15,
     sources: [POLLS[0].base],
     render: () => <HowToPlay />,
-  },
-  {
-    id: 'round-huawei',
-    title: 'Round: Huawei laptop',
-    poll: 'huawei',
-    notes: 'Same OS, same filesystem, a laptop CPU and laptop SSD. Most people guess way slower.',
-    sources: poll('huawei').sources,
-    render: (ctx) => <RoundSlide p={poll('huawei')} ctx={ctx} />,
   },
   {
     id: 'round-macbook',
     title: 'Round: MacBook',
     poll: 'macbook',
-    notes: 'The Mac enters. Base is the Huawei laptop, the closest hardware class.',
+    notes:
+      "\"Linux on the laptop: 22.7 seconds. The Mac has a CPU three and a half times faster\u2026\" Reveal: \"One and a half times slower.\"",
+    seconds: 35,
     sources: poll('macbook').sources,
     render: (ctx) => <RoundSlide p={poll('macbook')} ctx={ctx} />,
-  },
-  {
-    id: 'scaling',
-    title: 'Cost per agent',
-    notes:
-      'Total time divided by agents. Flat or falling means the machine keeps up: running in parallel is free. Rising means agents are queueing behind each other inside the OS.',
-    sources: SCALING,
-    render: () => (
-      <div className="slide">
-        <h2>Seconds per agent, as more agents start at once</h2>
-        <Lines
-          series={SCALING.map((id) => {
-            const c = cfg(id)
-            return { id, label: c.name, color: familyColor(c.family), points: NS.map((n) => ({ x: n, y: setupTime(c, n) / n })) }
-          })}
-          xs={NS}
-          width={W}
-          height={600}
-          yFormat={(v) => `${v.toFixed(v < 10 ? 1 : 0)} s`}
-          xLabel="agents starting at once"
-        />
-      </div>
-    ),
-  },
-  {
-    id: 'why-macos',
-    title: 'Why: macOS',
-    notes:
-      'YOUR EXPLANATION. Points to verify before presenting: (1) APFS metadata is copy-on-write B-trees, so each create/delete rewrites tree nodes rather than updating in place. (2) Spotlight (mds) indexes new files; XProtect / endpoint security see file events. The .noindex runs isolate Spotlight. (3) Per-call kernel overhead: an install is hundreds of thousands of small file system calls.',
-    render: () => (
-      <Why
-        family="apfs"
-        headline="Where the time goes on a Mac"
-        causes={[
-          ['Copy-on-write metadata', 'APFS never updates metadata in place. Every file created or deleted rewrites parts of its B-trees.'],
-          ['Someone reads every new file', 'Spotlight indexes what you write, and security scanning sees every file event. 53k files per install.'],
-          ['Small calls, many of them', 'An install is a storm of tiny open, mkdir, link and stat calls. Per-call overhead decides the result.'],
-        ]}
-      />
-    ),
   },
   {
     id: 'round-spotlight',
     title: 'Round: Spotlight off',
     poll: 'spotlight',
-    notes: 'Any folder whose name ends in .noindex is skipped by Spotlight. Same Mac, same disk, only the folder name changes.',
+    notes:
+      "\"Everyone blames Spotlight. Same Mac, folder Spotlight skips.\" Reveal: \"No difference.\"",
+    seconds: 25,
     sources: poll('spotlight').sources,
     render: (ctx) => <RoundSlide p={poll('spotlight')} ctx={ctx} />,
-  },
-  {
-    id: 'linux-fs',
-    title: 'Copy-on-write on Linux too',
-    notes:
-      'Linux is not magic either. btrfs is copy-on-write like APFS, and on the same disk it is the slowest of the three. Same hardware, same kernel, only the filesystem changes.',
-    sources: LINUX_FS,
-    render: () => (
-      <div className="slide">
-        <h2>Same disk, same kernel. Only the filesystem changes.</h2>
-        <div className="two-col">
-          <div>
-            <h3 className="chart-title">16 agents: checkout + install</h3>
-            <Bars items={LINUX_FS.map((id) => fsBar(cfg(id), setupTime(cfg(id), 16)))} width={680} labelWidth={110} format={fmtSeconds} />
-          </div>
-          <div>
-            <h3 className="chart-title">16 agents: delete worktrees</h3>
-            <Bars items={LINUX_FS.map((id) => fsBar(cfg(id), phaseTime(cfg(id), 'remove', 16)))} width={680} labelWidth={110} format={fmtSeconds} />
-          </div>
-        </div>
-        <p className="footnote">btrfs is copy-on-write, like APFS.</p>
-      </div>
-    ),
   },
   {
     id: 'round-windows',
     title: 'Round: Windows',
     poll: 'windows',
-    notes: 'Same desktop, dual boot. Linux ext4 vs Windows NTFS with Defender on.',
+    notes:
+      "\"Same laptop, booted into Windows.\" Reveal: \"Seventeen times. Six and a half minutes, identical hardware.\"",
+    seconds: 35,
     sources: poll('windows').sources,
     render: (ctx) => <RoundSlide p={poll('windows')} ctx={ctx} />,
   },
   {
-    id: 'round-devdrive',
-    title: 'Round: Dev Drive',
-    poll: 'devdrive',
-    notes: 'Microsoft\'s fix for exactly this: ReFS plus Defender in performance mode.',
-    sources: poll('devdrive').sources,
-    render: (ctx) => <RoundSlide p={poll('devdrive')} ctx={ctx} />,
-  },
-  {
-    id: 'round-wsl',
-    title: 'Round: WSL2',
-    poll: 'wsl',
-    notes: 'The repo lives inside WSL2: a real Linux kernel and ext4 on a virtual disk.',
-    sources: poll('wsl').sources,
-    render: (ctx) => <RoundSlide p={poll('wsl')} ctx={ctx} />,
+    id: 'round-ext4',
+    title: 'Round: ext4',
+    poll: 'ext4',
+    notes:
+      "\"Linux again, but ext4 instead of Fedora's default btrfs.\" Reveal: \"Four times faster. Only the filesystem changed.\"",
+    seconds: 25,
+    sources: poll('ext4').sources,
+    render: (ctx) => <RoundSlide p={poll('ext4')} ctx={ctx} />,
   },
   {
     id: 'race',
     title: 'The full race',
-    notes: 'Replay of the recorded runs, 16 agents each. Every row is one agent; faint = checkout, solid = install.',
+    notes:
+      "\"All of them on one clock. ext4 is done before you can see it. Windows is still going.\"",
+    seconds: 25,
     sources: RACE,
     render: () => (
       <div className="slide">
-        <h2>Sixteen agents, four machines, one replay</h2>
+        <h2>Sixteen agents, one replay</h2>
         <Race configs={RACE.map((id) => cfg(id))} phases={['worktree_add', 'install']} width={W} playing labels={RACE_LABELS} />
       </div>
-    ),
-  },
-  {
-    id: 'why-windows',
-    title: 'Why: Windows',
-    notes:
-      "YOUR EXPLANATION. Points to verify: Defender real-time protection is a filter driver that inspects file opens and writes. Dev Drive = ReFS + Defender performance mode (asynchronous scanning), Microsoft's own answer to exactly this. WSL2 is a real Linux kernel with ext4 on a virtual disk: fast, as long as the files live inside it and not on /mnt/c.",
-    render: () => (
-      <Why
-        family="ntfs"
-        headline="Where the time goes on Windows"
-        causes={[
-          ['A scanner on every write', "Defender's real-time protection sits between every program and the disk, and looks at each new file."],
-          ['Dev Drive', 'ReFS plus Defender in performance mode: scans happen after the write, not in its way.'],
-          ['WSL2', 'A real Linux kernel and ext4 in a virtual disk. Fast, as long as the repo lives inside it, not on /mnt/c.'],
-        ]}
-      />
     ),
   },
   {
     id: 'round-delete',
     title: 'Round: delete',
     poll: 'delete',
-    notes: 'Deleting is the step nobody thinks about. Base: the Linux desktop deleting 16 worktrees.',
+    notes:
+      "\"Cleaning up. ext4 deletes everything in under two seconds.\" Reveal: \"The Mac: 21 times as long.\"",
+    seconds: 25,
     sources: poll('delete').sources,
     render: (ctx) => <RoundSlide p={poll('delete')} ctx={ctx} />,
   },
   {
-    id: 'resources',
-    title: 'What the machine was doing',
-    notes: 'Install phase, 16 agents at once. CPU busy is machine-wide; kernel share is how much of the benchmark processes\' CPU time went to the OS rather than git or pnpm. High kernel share = filesystem work inside the OS. Windows has no kernel split (Git Bash cannot see native process times).',
-    sources: RESOURCE_ROWS,
-    resources: true,
-    render: () => <ResourceGrid />,
+    id: 'leaderboard',
+    title: 'Leaderboard',
+    notes:
+      "\"And the winner is\u2026 So, why?\"",
+    seconds: 15,
+    render: ({ state }) => <Leaderboard state={state} />,
   },
   {
-    id: 'git-race',
-    title: 'Bonus: git breaks',
+    id: 'syscalls',
+    title: 'What an install really is',
     notes:
-      'Found while benchmarking. git worktree add reads the admin directories of other worktrees. If a sibling is half-created, it fails, with errno 0, hence the message "Success". Agent harnesses need to retry or serialize worktree creation.',
-    sources: configs.map((c) => c.id),
-    render: () => {
-      const withRetries = configs
-        .map((c) => ({ c, r: Object.values(c.retries).reduce((a, b) => a + b, 0) }))
-        .filter((x) => x.r > 0)
-        .sort((a, b) => b.r - a.r)
-      return (
-        <div className="slide">
-          <h2>Start 16 at once and git itself trips over</h2>
-          <pre className="terminal">
-            <span className="term-dim">$ git worktree add --detach wt/13</span>
-            {'\n'}Preparing worktree (detached HEAD e91c705)
-            {'\n'}
-            <span className="term-err">fatal: failed to read .git/worktrees/11/commondir: Success</span>
-          </pre>
-          <p className="lead">
-            Creating a worktree reads every sibling's metadata. Catch one half-created and git gives up, reporting "Success". The benchmark retries, like an
-            agent harness should.
-          </p>
-          {withRetries.length > 0 && (
-            <ul className="retries">
-              {withRetries.slice(0, 6).map(({ c, r }) => (
-                <li key={c.id}>
-                  <span className="retry-cells">
-                    {Array.from({ length: Math.min(r, 24) }, (_, k) => (
-                      <i key={k} style={{ background: familyColor(c.family) }} />
-                    ))}
-                  </span>
-                  <span>
-                    {c.name} <b>{r}</b>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+      "\"An install barely moves any data. It's hundreds of thousands of tiny requests to the operating system: make this folder, link this file. Sixteen agents: millions at once. A faster SSD doesn't help.\"",
+    seconds: 30,
+    render: () => (
+      <div className="slide">
+        <h2>An install is not data. It's paperwork.</h2>
+        <div className="calls">
+          {SYSCALLS.map((c) => (
+            <div className="call-card" key={c.step}>
+              <code>{c.step}</code>
+              <span className="call-total">
+                <BlockText text={c.total} cell={12} />
+                <small>requests to the OS</small>
+              </span>
+              <ul>
+                {c.parts.map(([n, what]) => (
+                  <li key={what}>
+                    <b>{n}</b> {what}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
-      )
-    },
+        <p className="calls-total">
+          16 agents at once: <b>millions of tiny requests</b>, all at the same moment. A faster SSD doesn't help.
+        </p>
+      </div>
+    ),
+  },
+  {
+    id: 'two-problems',
+    title: 'Two different problems',
+    notes:
+      "\"Two separate problems. Left to right: how slow is one agent alone. Bottom to top: does running sixteen at once help. ext4 is cheap and parallel. btrfs is cheap, but agents wait in line. On the Mac every file is expensive. Windows has both.\"",
+    seconds: 40,
+    sources: SCATTER.map((s) => s.id),
+    render: () => (
+      <div className="slide">
+        <h2>Two problems: every file is slow, or agents wait in line</h2>
+        <Scatter
+          points={SCATTER.map((s) => {
+            const c = cfg(s.id)
+            return { id: s.id, label: s.label, sub: s.sub, anchor: s.anchor, color: familyColor(c.family), x: setupTime(c, 1), y: (16 * setupTime(c, 1)) / setupTime(c, 16) }
+          })}
+          width={W}
+          height={600}
+          xTicks={[0.5, 1, 2, 5, 10, 30]}
+          yTicks={[0, 1, 2, 3]}
+          xLabel="one agent alone (seconds, log scale)"
+          yLabel="how much 16 at once helps"
+          xFormat={(v) => `${v} s`}
+          yFormat={(v) => `${v}×`}
+        />
+      </div>
+    ),
+  },
+  {
+    id: 'cpu-load',
+    title: 'Does it slow down your computer?',
+    notes:
+      "\"Does this make your computer sluggish? Yes. While sixteen agents set up and clean up, half to all of your CPU is busy. On the Mac it hits 100%: every core. Add it up and Windows keeps the whole laptop busy for about four minutes, ext4 for four seconds. And three quarters or more of that is the operating system doing file bookkeeping, not pnpm or git.\"",
+    seconds: 35,
+    sources: LOAD.map((l) => l.id),
+    render: () => (
+      <div className="slide">
+        <h2>Does it slow down your computer? Yes.</h2>
+        <h3 className="chart-title">16 agents create, install and delete: the whole computer at 100% for…</h3>
+        <Bars
+          items={LOAD.map((l) => ({
+            id: l.id,
+            label: l.label,
+            sub: `${l.avg}% busy for ${l.wall >= 100 ? `${Math.round(l.wall / 60)} min` : `${Math.round(l.wall)} s`}, peak ${l.peak}%`,
+            value: l.busyFor,
+            color: familyColor(cfg(l.id).family),
+          }))}
+          width={W}
+          labelWidth={330}
+          format={(v) => (v >= 100 ? `${(v / 60).toFixed(1)} min` : `${v.toFixed(v < 10 ? 1 : 0)} s`)}
+        />
+        <p className="calls-total load-note">
+          <b>Three quarters or more of it is the operating system</b> doing file bookkeeping, not pnpm or git.
+        </p>
+        <p className="footnote">Machine-wide CPU from the benchmark's sampler. Windows: warmup run. We measured load, not how laggy the UI felt.</p>
+      </div>
+    ),
+  },
+  {
+    id: 'linux-why',
+    title: 'Why btrfs looked like the future',
+    notes:
+      "\"For years btrfs was 'the future' and ext4 the old workhorse. In 2008 ext4's own maintainer called it a bridge to btrfs, and Fedora made btrfs the default in 2020. The idea: never overwrite anything, write every change as a new copy up one big tree. That gives you free snapshots, checksums that catch a dying disk, compression, instant copies. ext4 just updates its records in place: boring. But 'never overwrite' means every tiny change rewrites its path to the top of that one tree, and every agent has to pass through the top. With one user you never notice. With sixteen agents they queue: seven times more waiting.\"",
+    seconds: 50,
+    render: () => (
+      <Tradeoff
+        headline="Why btrfs looked like the future"
+        rows={[
+          {
+            fs: 'ext4',
+            family: 'ext4',
+            era: '1993 → 2008',
+            built: ['Update records in place', 'Journal for crash safety'],
+            gives: ['Simple, predictable', 'No snapshots, no data checksums'],
+            costs: ['Agents mostly wait just for their own folder', '1× waiting'],
+          },
+          {
+            fs: 'btrfs',
+            family: 'btrfs',
+            era: '2007 → Fedora default 2020',
+            built: ['Never overwrite: copy every change up one big tree'],
+            gives: ['Free snapshots', 'Checksums catch a dying disk', 'Compression, instant copies'],
+            costs: ['Every tiny change rewrites its path to the top', 'All agents queue at the root: 7× waiting'],
+          },
+        ]}
+        footnote="In 2008, ext4's maintainer described ext4 as a bridge to btrfs. Waiting: kernel profiles of 16 agents (lab/)."
+      />
+    ),
+  },
+  {
+    id: 'why-macos',
+    title: 'Why APFS is built this way',
+    notes:
+      "\"APFS replaced a filesystem from 1998, and it shipped on the iPhone first, in 2017. Apple built it for flash storage, with encryption as a primary feature. Like btrfs it never overwrites its records: that buys crash safety, instant clones, snapshots for Time Machine and system updates. Perfect for a phone: one person, one app, precious photos. Agents are the opposite. Every create and delete rewrites tree nodes, and it doesn't get faster with more threads: five times slower per file than Linux, on a faster CPU.\"",
+    seconds: 45,
+    render: () => (
+      <Tradeoff
+        headline="Why APFS is built this way"
+        rows={[
+          {
+            fs: 'APFS',
+            family: 'apfs',
+            era: '2016, iPhone first',
+            built: ['Flash storage, encryption first', 'Never overwrite records (copy-on-write)'],
+            gives: ['Crash safety without a journal', 'Instant clones and snapshots', 'Per-file encryption'],
+            costs: ['Every create and delete rewrites tree nodes', "Doesn't speed up with more threads", '5× slower per file, 86–99% inside macOS'],
+          },
+        ]}
+        footnote="Apple, WWDC 2016: 'optimized for Flash/SSD storage, engineered with encryption as a primary feature'. Thread scaling: pnpm team's measurements."
+      />
+    ),
+  },
+  {
+    id: 'why-windows',
+    title: 'Why Windows checks every file',
+    notes:
+      "\"On Windows it's not really the filesystem. After twenty years of malware, every Windows since 8 ships with Defender, and it sits in front of the disk: every file is checked when it's opened, and the program waits. Invisible for normal use, it stops a lot of attacks. A developer opening millions of files pays it millions of times. Microsoft knows: Dev Drive, from 2023, checks code folders later instead of first. We haven't measured it yet.\"",
+    seconds: 40,
+    render: () => (
+      <Tradeoff
+        headline="Why Windows checks every file"
+        rows={[
+          {
+            fs: 'NTFS + Defender',
+            family: 'ntfs',
+            era: '1993 + the malware era',
+            built: ['Antivirus in every Windows (since 8)', 'A filter in front of the disk'],
+            gives: ['Every file checked before a program uses it', 'Safe by default, no setup'],
+            costs: ['Every open waits for a scan', 'One agent alone: 27 s vs 1.4 s on Linux', 'Dev Drive (2023): check later instead'],
+          },
+        ]}
+        footnote="Same laptop, same SSD. Defender real-time protection on, as shipped. Dev Drive not measured yet."
+      />
+    ),
+  },
+  {
+    id: 'different-job',
+    title: 'Built for a different job',
+    notes:
+      "\"None of these are bad filesystems. They were built for a different job: files are precious, one person does one thing at a time, files change now and then. Agents break all three. node_modules is disposable, sixteen agents run around 950 threads, and they churn through millions of tiny files. We pay for snapshots, checksums, encryption and virus scans on files we delete an hour later.\"",
+    seconds: 35,
+    render: () => (
+      <div className="slide">
+        <h2>Built for a different job</h2>
+        <ul className="eras">
+          {ERAS.map(([then, now]) => (
+            <li key={then}>
+              <span className="era-then">{then}</span>
+              <span className="era-arrow">→</span>
+              <span className="era-now">{now}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="calls-total">
+          We pay for <b>snapshots, checksums, encryption and virus scans</b> on files we delete an hour later.
+        </p>
+      </div>
+    ),
   },
   {
     id: 'takeaways',
     title: 'What to do about it',
-    notes: 'Adjust to what the final data shows. Each tip should point at a slide we just saw.',
+    notes:
+      "\"More agents isn't free: on btrfs and Windows, sixteen at once take as long as sixteen in a row. Reuse worktrees. On Linux, use ext4 for agent work. On Windows, get off scanned NTFS. On the Mac, keep pnpm's defaults.\"",
+    seconds: 30,
     render: () => (
       <div className="slide">
         <h2>Running many agents? Pick your filesystem on purpose.</h2>
@@ -355,31 +455,31 @@ export const SLIDES: SlideDef[] = [
           <li>
             <i style={{ background: INK.primary }} />
             <span>
-              <b>Reuse worktrees</b> instead of creating and deleting them. Deleting is often the slowest step.
+              <b>More agents isn't free.</b> On btrfs and Windows, 16 at once finish no sooner than 16 in a row.
             </span>
           </li>
           <li>
             <i style={{ background: INK.primary }} />
             <span>
-              <b>Stagger agent starts</b> a little. Less contention, and git stops tripping over itself.
-            </span>
-          </li>
-          <li>
-            <i style={{ background: familyColor('apfs') }} />
-            <span>
-              <b>macOS:</b> keep worktrees in a folder ending in <code>.noindex</code>.
-            </span>
-          </li>
-          <li>
-            <i style={{ background: familyColor('refs') }} />
-            <span>
-              <b>Windows:</b> a Dev Drive or WSL2, never node_modules on scanned NTFS.
+              <b>Reuse worktrees</b> instead of creating and deleting them. On the Mac, deleting took longer than creating.
             </span>
           </li>
           <li>
             <i style={{ background: familyColor('ext4') }} />
             <span>
-              <b>Linux:</b> ext4 or xfs for the work directory, and the pnpm store on the same filesystem.
+              <b>Linux:</b> ext4 for agent work directories, pnpm store on the same filesystem. Same calls, 4× faster than btrfs.
+            </span>
+          </li>
+          <li>
+            <i style={{ background: familyColor('ntfs') }} />
+            <span>
+              <b>Windows:</b> keep repos off scanned NTFS: 17× slower than Linux on the same laptop. Try a Dev Drive or WSL2.
+            </span>
+          </li>
+          <li>
+            <i style={{ background: familyColor('apfs') }} />
+            <span>
+              <b>macOS:</b> keep pnpm's default (clones). Forcing hardlinks was 4–6× slower.
             </span>
           </li>
         </ul>
@@ -387,15 +487,11 @@ export const SLIDES: SlideDef[] = [
     ),
   },
   {
-    id: 'leaderboard',
-    title: 'Leaderboard',
-    notes: 'Announce the winner.',
-    render: ({ state }) => <Leaderboard state={state} />,
-  },
-  {
     id: 'thanks',
     title: 'Thanks',
-    notes: 'Repo link; it runs on macOS, Linux, Windows and WSL with one command.',
+    notes:
+      "\"One command, any OS. Thanks!\"",
+    seconds: 10,
     render: () => (
       <div className="slide thanks">
         <BlockText text={'RUN IT\nYOURSELF'} cell={22} />
@@ -406,8 +502,47 @@ export const SLIDES: SlideDef[] = [
   },
 ]
 
-function fsBar(c: Config, value: number) {
-  return { id: c.id, label: c.stackName, value, color: familyColor(c.family) }
+interface TradeoffRow {
+  fs: string
+  family: string
+  era: string
+  built: string[]
+  gives: string[]
+  costs: string[]
+}
+
+/** Design → benefit → what agents pay, one row per filesystem. */
+function Tradeoff({ headline, rows, footnote }: { headline: string; rows: TradeoffRow[]; footnote?: string }) {
+  return (
+    <div className={rows.length === 1 ? 'slide tradeoff single' : 'slide tradeoff'}>
+      <h2>{headline}</h2>
+      <div className="to-grid">
+        <span />
+        <span className="to-head">Built for</span>
+        <span className="to-head">Gives you</span>
+        <span className="to-head to-cost">What agents pay</span>
+        {rows.map((r) => (
+          <Fragment key={r.fs}>
+            <span className="to-fs">
+              <span>
+                <i style={{ background: familyColor(r.family) }} />
+                {r.fs}
+              </span>
+              <small>{r.era}</small>
+            </span>
+            {[r.built, r.gives, r.costs].map((items, k) => (
+              <ul key={k} className={k === 2 ? 'to-cell to-cost' : 'to-cell'}>
+                {items.map((t) => (
+                  <li key={t}>{t}</li>
+                ))}
+              </ul>
+            ))}
+          </Fragment>
+        ))}
+      </div>
+      {footnote && <p className="footnote">{footnote}</p>}
+    </div>
+  )
 }
 
 function Why({ family, headline, causes }: { family: string; headline: string; causes: [string, string][] }) {
@@ -567,60 +702,6 @@ function HowToPlay() {
       <p className="footnote">
         Exact guess: 1000 points, down to 0 when you're {ZERO_AT}× off. The three closest get named on screen.
       </p>
-    </div>
-  )
-}
-
-const RESOURCE_COLS: { key: keyof Resources; label: string; sub: string; format: (v: number) => string; max?: number }[] = [
-  { key: 'busy_pct', label: 'CPU busy', sub: 'all cores', format: (v) => `${Math.round(v)}%`, max: 100 },
-  { key: 'kernel_pct', label: 'Kernel share', sub: 'of the CPU time', format: (v) => `${Math.round(v)}%`, max: 100 },
-  { key: 'mem_mb', label: 'Extra RAM', sub: 'peak', format: (v) => (v >= 1000 ? `${(v / 1024).toFixed(1)} GB` : `${Math.round(v)} MB`) },
-  { key: 'disk_mb', label: 'Disk traffic', sub: 'read + written', format: (v) => (v >= 1000 ? `${(v / 1024).toFixed(1)} GB` : `${Math.round(v)} MB`) },
-]
-const RES_CELLS = 12
-
-function ResourceGrid() {
-  const rows = RESOURCE_ROWS.map((id) => cfg(id))
-  const max = Object.fromEntries(
-    RESOURCE_COLS.map((col) => [col.key, col.max ?? Math.max(1, ...rows.map((c) => c.resources.install?.[col.key] ?? 0))]),
-  )
-  return (
-    <div className="slide">
-      <h2>16 installs at once: what the machine was doing</h2>
-      <div className="res-grid">
-        <span />
-        {RESOURCE_COLS.map((col) => (
-          <span className="res-head" key={col.key}>
-            {col.label}
-            <small>{col.sub}</small>
-          </span>
-        ))}
-        {rows.map((c) => (
-          <Fragment key={c.id}>
-            <span className="res-name">
-              <i style={{ background: familyColor(c.family) }} />
-              <span>
-                {c.machineName}
-                <small>{c.stackName}</small>
-              </span>
-            </span>
-            {RESOURCE_COLS.map((col) => {
-              const v = c.resources.install?.[col.key]
-              const filled = v === undefined ? 0 : Math.max(1, Math.round((v / max[col.key]) * RES_CELLS))
-              return (
-                <span className="res-cell" key={col.key}>
-                  <span className="res-cells">
-                    {Array.from({ length: RES_CELLS }, (_, k) => (
-                      <i key={k} style={k < filled ? { background: familyColor(c.family) } : undefined} />
-                    ))}
-                  </span>
-                  <span className="res-value">{v === undefined ? 'n/a' : col.format(v)}</span>
-                </span>
-              )
-            })}
-          </Fragment>
-        ))}
-      </div>
     </div>
   )
 }

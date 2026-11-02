@@ -1,0 +1,50 @@
+# btrfs
+== prof
+worktree_add 6.75
+install 15.45
+remove 17.57
+
+## btrfs worktree_add: on-CPU samples 13263, in kernel 60%
+  kernel time by syscall: ? 51%, openat 31%, mkdir 9%, newfstatat 6%, openat2 1%, close 1%
+  hottest kernel functions (self): finish_task_switch.isra.0 9%, _raw_spin_unlock_irqrestore 9%, osq_lock 5%, native_queued_spin_lock_slowpath 5%, rwsem_spin_on_owner 4%, clear_highpages_kasan_tagged 4%, _raw_spin_lock 3%
+  spinning on locks (top-3 frames): 29% of kernel samples
+  fs functions (inclusive): btrfs_create_common 43%, btrfs_create_new_inode 36%, btrfs_search_slot 30%, btrfs_insert_empty_items 26%, btrfs_do_write_iter 25%, btrfs_buffered_write 25%, btrfs_tree_lock_nested 12%, btrfs_add_link 12%, btrfs_insert_dir_item 11%
+  off-CPU (non-idle) thread-seconds asleep: 79.3
+  asleep by syscall: ? 71%, openat 23%, mkdir 6%, getdents64 0%, openat2 0%, newfstatat 0%
+      60%  sleep  in  handle_reserve_ticket < reserve_bytes
+      15%  rwsem_down_read_slowpath > down_read  in  btrfs_read_lock_root_node < btrfs_search_slot
+      14%  io_schedule > folio_wait_bit_common  in  filemap_fault < __do_fault
+       3%  rwsem_down_write_slowpath > down_write  in  btrfs_search_slot < btrfs_insert_empty_items
+       3%  rwsem_down_read_slowpath > down_read  in  btrfs_search_slot < btrfs_lookup_dir_item
+       2%  rwsem_down_read_slowpath > down_read  in  btrfs_search_slot < btrfs_check_dir_item_collision
+       2%  rwsem_down_write_slowpath > down_write  in  btrfs_opendir < do_dentry_open
+
+## btrfs install: on-CPU samples 43367, in kernel 81%
+  kernel time by syscall: linkat 56%, ? 16%, mkdir 8%, rename 6%, vfs_link 4%, symlink 4%
+  hottest kernel functions (self): finish_task_switch.isra.0 21%, native_queued_spin_lock_slowpath 12%, _raw_spin_unlock_irqrestore 9%, osq_lock 8%, __memmove 5%, __d_lookup_rcu 4%, btrfs_bin_search 3%
+  spinning on locks (top-3 frames): 36% of kernel samples
+  fs functions (inclusive): btrfs_link 49%, btrfs_search_slot 45%, btrfs_insert_empty_items 37%, btrfs_add_link 34%, btrfs_insert_dir_item 22%, btrfs_tree_read_lock_nested 14%, btrfs_tree_lock_nested 13%, btrfs_read_lock_root_node 13%, btrfs_create_new_inode 13%
+  off-CPU (non-idle) thread-seconds asleep: 8038.8
+  asleep by syscall: linkat 69%, mkdir 13%, symlink 8%, ? 7%, vfs_link 2%, rename 1%
+      56%  sleep  in  handle_reserve_ticket < reserve_bytes
+      19%  rwsem_down_write_slowpath > down_write  in  filename_create < filename_linkat
+       8%  rwsem_down_read_slowpath > down_read  in  btrfs_read_lock_root_node < btrfs_search_slot
+       6%  rwsem_down_write_slowpath > down_write  in  vfs_link < filename_linkat
+       5%  rwsem_down_write_slowpath > down_write  in  filename_create < filename_symlinkat
+       4%  rwsem_down_write_slowpath > down_write  in  filename_create < filename_mkdirat
+       1%  rwsem_down_write_slowpath > down_write  in  btrfs_search_slot < btrfs_insert_empty_items
+
+## btrfs remove: on-CPU samples 41804, in kernel 99%
+  kernel time by syscall: unlink 69%, rmdir 19%, newfstatat 4%, vfs_unlink 3%, ? 3%, getdents64 2%
+  hottest kernel functions (self): osq_lock 53%, _raw_spin_unlock_irqrestore 6%, finish_task_switch.isra.0 6%, rwsem_down_write_slowpath 3%, rwsem_spin_on_owner 3%, _raw_spin_unlock_irq 3%, __memmove 2%
+  spinning on locks (top-3 frames): 67% of kernel samples
+  fs functions (inclusive): btrfs_search_slot 83%, btrfs_tree_lock_nested 64%, btrfs_lock_root_node 64%, btrfs_unlink 49%, btrfs_evict_inode 36%, btrfs_lookup_dir_item 31%, btrfs_del_inode_ref 18%, btrfs_commit_inode_delayed_inode 13%, btrfs_lookup_inode 12%
+  off-CPU (non-idle) thread-seconds asleep: 181.6
+  asleep by syscall: vfs_unlink 54%, ? 27%, unlink 15%, getdents64 3%, rmdir 1%, newfstatat 0%
+      49%  rwsem_down_write_slowpath > down_write  in  btrfs_lock_root_node < btrfs_search_slot
+      44%  rwsem_down_read_slowpath > down_read  in  btrfs_read_lock_root_node < btrfs_search_slot
+       3%  sleep  in  __mutex_lock.constprop.0 < btrfs_delete_delayed_dir_index
+       2%  sleep  in  handle_reserve_ticket < reserve_bytes
+       0%  sleep  in  __mutex_lock.constprop.0 < btrfs_delayed_delete_inode_ref
+       0%  sleep  in  __mutex_lock.constprop.0 < btrfs_readdir_get_delayed_items
+       0%  sleep  in  __mutex_lock.constprop.0 < btrfs_delayed_update_inode
