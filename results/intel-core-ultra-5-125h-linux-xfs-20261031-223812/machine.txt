@@ -1,0 +1,13 @@
+label: intel-core-ultra-5-125h-linux
+bench_dir: /mnt/fsbench-xfs
+fs: xfs
+scanner: none
+commit: e91c7052327199d7bef160c7f1ef731760c2bc35
+node: v22.22.3  pnpm: 12.3.4  git version 2.55.0
+uname: Linux fedora 7.2.7-200.fc44.x86_64 #1 SMP PREEMPT_DYNAMIC Mon Sep 21 18:25:57 UTC 2026 x86_64 GNU/Linux
+cpu:  Intel(R) Core(TM) Ultra 5 125H
+cores: 18
+MemTotal:       15864052 kB
+/dev/loop0 xfs rw,relatime,seclabel,inode64,logbufs=8,logbsize=32k,noquota
+loop0  xfs
+ac_online: 1

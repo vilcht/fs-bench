@@ -1,0 +1,13 @@
+label: intel-core-ultra-5-125h-linux
+bench_dir: /home/vilcht/fsbench-data/home
+fs: btrfs
+scanner: none
+commit: e91c7052327199d7bef160c7f1ef731760c2bc35
+node: v22.22.3  pnpm: 12.3.4  git version 2.55.0
+uname: Linux fedora 7.2.7-200.fc44.x86_64 #1 SMP PREEMPT_DYNAMIC Mon Sep 21 18:25:57 UTC 2026 x86_64 GNU/Linux
+cpu:  Intel(R) Core(TM) Ultra 5 125H
+cores: 18
+MemTotal:       15864052 kB
+/dev/nvme0n1p6[/home] btrfs rw,relatime,seclabel,compress=zstd:1,ssd,discard=async,space_cache=v2,subvolid=257,subvol=/home
+nvme0n1p6  btrfs
+ac_online: 1
