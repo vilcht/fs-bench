@@ -56,19 +56,16 @@ the laptop's Linux-vs-Windows comparison on identical hardware is the fairer one
 - The Windows run used the label `ntfs`; `machines.json` maps it to `huawei-win`. Future Windows runs should use
   `LABEL=intel-core-ultra-5-125h-windows` (also mapped) or a new entry.
 
-## Deployed
+## Talk given, site taken down
 
-https://fs-bench-talk.terenoewt.workers.dev, deployed 2026-11-02 from the `talk-real-data` branch. The presenter
-key is a Worker secret (`PRESENTER_KEY`); the local copy is in `~/.config/fs-bench-talk/presenter-key` on the
-laptop. After changing slides or data: `cd talk && pnpm data && pnpm run deploy`.
+Presented on 2026-11-02 at https://fs-bench-talk.terenoewt.workers.dev; the Worker (and its Durable Object state)
+was deleted afterwards with `wrangler delete`. 7 players, all 5 rounds played. Final leaderboard: mich 1,805,
+AC 1,778, euni 1,156, fbi 1,029, tomi 983, Shplonk 973, konrad 800.
 
-Tested on the live site: a WebSocket protocol test (presenter + 6 bots: wrong key, closed/out-of-range votes,
-all 5 rounds, scoring, reconnect) and a headless-browser run through all 18 slides with a phone audience and
-8 bots. The room was reset afterwards (0 players).
+To bring it back: `cd talk && pnpm install && pnpm exec wrangler login && pnpm exec wrangler secret put PRESENTER_KEY
+&& pnpm run deploy` (a new presenter key, a fresh room). `/notes-draft` works without a key for practice.
 
 ## Next steps
 
-1. Rehearse from `talk/SCRIPT.md`, with `/notes?key=…` on a second screen.
-2. Before the talk, open `/present?key=…` and press `Shift+R` to clear test votes and players.
-3. Optional, for a later version: Dev Drive and WSL2 runs on the laptop (the Dev Drive check needs an admin
+1. Optional, for a later version: Dev Drive and WSL2 runs on the laptop (the Dev Drive check needs an admin
    shell: it failed with "access denied"), a full 3-rep Windows run, and the Mac mini.
