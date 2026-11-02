@@ -1,10 +1,9 @@
 import type { ReactNode } from 'react'
-import { type Config, cfg, configs, phaseTime, setupTime } from '../shared/data'
+import { type Config, cfg, configs, setupTime } from '../shared/data'
 import { METRIC_LABEL, POLLS, type Poll, ZERO_AT, describeRatio, fmtRatio, metricValue, poll } from '../shared/polls'
 import type { RoomState } from '../shared/protocol'
 import { BlockText } from './blocks/BlockText'
 import { SectorField } from './blocks/SectorField'
-import { Bars } from './charts/Bars'
 import { Guesses } from './charts/Guesses'
 import { Race } from './charts/Race'
 import { Scatter } from './charts/Scatter'
@@ -43,63 +42,36 @@ const RACE_LABELS: Record<string, string> = {
 }
 
 const RACE = ['huawei:ext4', 'huawei:home-btrfs', 'macbook:apfs', 'huawei-win:ntfs']
-const LINUX_FS = ['huawei:ext4', 'huawei:btrfs', 'huawei:home-btrfs', 'huawei:xfs']
-
 // strace -f -c on one agent (lab/results/strace-*.txt).
 const SYSCALLS: { step: string; total: string; parts: [string, string][] }[] = [
-  { step: 'git worktree add', total: '97K', parts: [['12k', 'files written'], ['27k', 'opens'], ['3.5k', 'directories']] },
-  { step: 'pnpm install', total: '202K', parts: [['53k', 'hardlinks'], ['7.8k', 'directories'], ['3.7k', 'symlinks']] },
-  { step: 'git worktree remove', total: '215K', parts: [['68k', 'unlinks'], ['10.7k', 'directories removed'], ['79k', 'stats']] },
+  { step: 'git worktree add', total: '97K', parts: [['12k', 'files written'], ['3.5k', 'folders created']] },
+  { step: 'pnpm install', total: '202K', parts: [['53k', 'file links'], ['7.8k', 'folders created']] },
+  { step: 'git worktree remove', total: '215K', parts: [['68k', 'files deleted'], ['10.7k', 'folders deleted']] },
 ]
 
 const SCATTER: { id: string; label: string; sub?: string; anchor?: 'right' | 'left' | 'above' | 'below' | 'below-left' }[] = [
   { id: 'huawei:ext4', label: 'Linux ext4', sub: 'cheap and parallel', anchor: 'right' },
-  { id: 'huawei:btrfs', label: 'btrfs', anchor: 'above' },
-  { id: 'huawei:home-btrfs', label: 'btrfs (home)', anchor: 'right' },
-  { id: 'huawei:xfs', label: 'xfs', sub: 'cheap, but queue', anchor: 'below' },
-  { id: 'macbook:apfs', label: 'macOS APFS', sub: 'expensive per file', anchor: 'right' },
-  { id: 'huawei-win:ntfs', label: 'Windows NTFS', sub: 'expensive and queue', anchor: 'below-left' },
+  { id: 'huawei:home-btrfs', label: 'Linux btrfs', sub: 'agents wait in line', anchor: 'below' },
+  { id: 'macbook:apfs', label: 'macOS', sub: 'every file is expensive', anchor: 'right' },
+  { id: 'huawei-win:ntfs', label: 'Windows', sub: 'both', anchor: 'below-left' },
 ]
 
-// bpftrace profiles, 16 agents (lab/results/{ext4,xfs,btrfs}.txt).
+// bpftrace profiles, 16 agents (lab/results/{ext4,btrfs}.txt): non-idle sleep during install, thread-seconds.
 const BOTTLENECKS = [
   {
     fs: 'ext4',
-    title: 'Per-directory locks, batched journal',
-    text: 'Threads mostly wait for the directory they write into. The journal folds thousands of changes into one commit.',
-    num: '1.2k',
-    numSub: 'thread-seconds asleep (install)',
-  },
-  {
-    fs: 'xfs',
-    title: 'One journal, one reservation lock',
-    text: 'Every link reserves log space up front, under a single global lock. Half of all waiting is right there.',
-    num: '11.6k',
-    numSub: 'thread-seconds asleep (install)',
+    title: 'Updates in place, journals in batches',
+    text: 'Agents mostly just wait for the folder they are writing into.',
+    num: '1×',
+    numSub: 'time spent waiting',
   },
   {
     fs: 'btrfs',
-    title: 'One B-tree, one root',
-    text: 'All files live in one copy-on-write tree. Every unlink locks its root; deleting is two thirds spinning on it.',
-    num: '8.0k',
-    numSub: 'thread-seconds asleep (install)',
+    title: 'Never overwrites: copies up one big tree',
+    text: 'Every change goes through the top of the same tree, so all agents queue there.',
+    num: '7×',
+    numSub: 'time spent waiting',
   },
-]
-
-// Profiled lab runs on fresh 48 GB volumes (lab/results/*.txt).
-const XFS_PROOF = [
-  { id: 'xfs', label: 'xfs default', family: 'xfs', install: 21.48, remove: 15.67 },
-  { id: 'xfs-biglog', label: 'xfs, 1 GB log', family: 'xfs', install: 21.91, remove: 7.94 },
-  { id: 'xfs-noparent', label: 'xfs, no parent ptrs', family: 'xfs', install: 16.77, remove: 6.28 },
-  { id: 'ext4', label: 'ext4', family: 'ext4', install: 3.3, remove: 1.49 },
-]
-
-const MYTHS: ['no' | 'partly' | 'yes', string, string][] = [
-  ['no', '"It\'s the SSD."', 'Same laptop, same SSD: Windows takes 17× as long as Linux. The Mac has the faster SSD.'],
-  ['no', '"Spotlight is indexing everything."', 'A folder Spotlight skips (.noindex): no difference.'],
-  ['no', '"ext4 can\'t hardlink, so pnpm copies."', 'It can, and pnpm 12 prefers hardlinks on Linux. Copies mean the store is on another filesystem.'],
-  ['partly', '"syspolicyd checks every process."', 'Real, but it costs at process start (postinstall scripts). Our installs ran no scripts.'],
-  ['no', '"Just run more agents."', 'On btrfs, xfs and NTFS, 16 at once finish no sooner than 16 in a row.'],
 ]
 
 export const SLIDES: SlideDef[] = [
@@ -107,7 +79,8 @@ export const SLIDES: SlideDef[] = [
     id: 'title',
     title: 'Title',
     bleed: true,
-    notes: 'Hi! 10 minutes on why the machine you run agents on matters more than you think. Join on your phone or laptop now: there are points to win.',
+    notes:
+      "Hi! Ten minutes on why the machine you run coding agents on matters more than you think. Join on your phone now: there's a game with points.",
     render: ({ state, joinUrl }) => (
       <div className="slide bleed">
         <SectorField title={'16 AGENTS\nONE SSD'} col={4} row={4} />
@@ -122,7 +95,7 @@ export const SLIDES: SlideDef[] = [
     id: 'workflow',
     title: 'One agent, one worktree',
     notes:
-      'Each agent gets a git worktree so they do not step on each other. Each worktree needs its own node_modules. Every square here is a thousand files. Tiny files are exactly what filesystems are worst at.',
+      "Every agent gets its own copy of the repo, a git worktree, and runs pnpm install in it. Each square is a thousand files. Sixteen agents: over a million files created and deleted.",
     render: () => (
       <div className="slide">
         <h2>One agent = one worktree = one install</h2>
@@ -161,7 +134,7 @@ export const SLIDES: SlideDef[] = [
     id: 'lineup',
     title: 'The lineup',
     notes:
-      'The main character is one Huawei laptop, dual-booted: Fedora Linux and Windows 11, same CPU, same SSD. Against it, a MacBook Air M4, also a 16 GB laptop. Same l2beat commit, same Node and pnpm everywhere, offline installs from a warm store, so the network is out of the picture. 1, 2, 4, 8 and 16 agents at once. Linux and Mac: median of 3 runs. Windows: 1 run, it took over an hour.',
+      "One laptop, dual-booted: Linux and Windows. Same CPU, same SSD. Plus a MacBook Air M4. Same repo, same tools, offline installs, so the network doesn't matter.",
     render: () => {
       const machines = [...new Map(configs.map((c) => [c.machine, c])).values()]
       return (
@@ -196,7 +169,8 @@ export const SLIDES: SlideDef[] = [
   {
     id: 'how-to-play',
     title: 'How to play',
-    notes: 'Explain the slider once: we show one result, then the next machine. Guess how many times as long it takes. 1x same, 0.5x twice as fast, 3x three times as long. Closest guesses get the most points; 2.5x off gets nothing.',
+    notes:
+      "You see one result, then guess how many times as long the next machine takes. 1x is the same, 3x is three times as long. Closest guess wins the most points.",
     sources: [POLLS[0].base],
     render: () => <HowToPlay />,
   },
@@ -205,7 +179,7 @@ export const SLIDES: SlideDef[] = [
     title: 'Round: MacBook',
     poll: 'macbook',
     notes:
-      'Base: the Huawei laptop on Fedora, its default btrfs home. The MacBook Air has the faster CPU: about 3x faster on our CPU-only baseline. Most people guess the Mac wins.',
+      "Base: the laptop on Linux, 22.7 s. The Mac has the faster CPU, about 3.5x. Reveal: one and a half times as long. On the faster chip.",
     sources: poll('macbook').sources,
     render: (ctx) => <RoundSlide p={poll('macbook')} ctx={ctx} />,
   },
@@ -214,7 +188,7 @@ export const SLIDES: SlideDef[] = [
     title: 'Round: Spotlight off',
     poll: 'spotlight',
     notes:
-      'Any folder whose name ends in .noindex is skipped by Spotlight. Same Mac, same disk, only the folder name changes. Reveal: no difference. Spotlight is not the culprit. (Honest caveat: the .noindex pass ran second, on a fanless Air that had warmed up; its CPU baseline got about 30% slower. Even so, nothing points at Spotlight.)',
+      "Everyone blames Spotlight indexing first. Folders ending in .noindex are skipped. Reveal: no difference. Not Spotlight.",
     sources: poll('spotlight').sources,
     render: (ctx) => <RoundSlide p={poll('spotlight')} ctx={ctx} />,
   },
@@ -223,7 +197,7 @@ export const SLIDES: SlideDef[] = [
     title: 'Round: Windows',
     poll: 'windows',
     notes:
-      'The same Huawei laptop, dual boot: Fedora vs Windows 11, NTFS with Defender real-time protection on, as it ships. Same CPU, same SSD. Expect people to guess 2-3x; the slider goes to 30x for a reason.',
+      "Same laptop, booted into Windows, Defender on as it ships. Reveal: 17 times. Six and a half minutes on identical hardware.",
     sources: poll('windows').sources,
     render: (ctx) => <RoundSlide p={poll('windows')} ctx={ctx} />,
   },
@@ -231,38 +205,16 @@ export const SLIDES: SlideDef[] = [
     id: 'round-ext4',
     title: 'Round: ext4',
     poll: 'ext4',
-    notes: 'Back to Linux. Fedora installs btrfs by default. Same laptop, same kernel, the work directory on an ext4 volume instead.',
+    notes:
+      "Back to Linux. Fedora's default is btrfs; same laptop with ext4 instead. Reveal: four times faster, only the filesystem changed.",
     sources: poll('ext4').sources,
     render: (ctx) => <RoundSlide p={poll('ext4')} ctx={ctx} />,
-  },
-  {
-    id: 'linux-fs',
-    title: 'Same laptop, four filesystems',
-    notes:
-      'Linux is not magic either: only ext4 keeps up. btrfs is copy-on-write like APFS (the home one also compresses with zstd). xfs is the surprise: slowest to install, with the CPU mostly idle (25% busy), so it is waiting rather than working. Deleting: ext4 under 2 s, everything else about 15 s.',
-    sources: LINUX_FS,
-    render: () => (
-      <div className="slide">
-        <h2>Same laptop, same kernel. Only the filesystem changes.</h2>
-        <div className="two-col">
-          <div>
-            <h3 className="chart-title">16 agents: checkout + install</h3>
-            <Bars items={LINUX_FS.map((id) => fsBar(cfg(id), setupTime(cfg(id), 16)))} width={680} labelWidth={150} format={fmtSeconds} />
-          </div>
-          <div>
-            <h3 className="chart-title">16 agents: delete worktrees</h3>
-            <Bars items={LINUX_FS.map((id) => fsBar(cfg(id), phaseTime(cfg(id), 'remove', 16)))} width={680} labelWidth={150} format={fmtSeconds} />
-          </div>
-        </div>
-        <p className="footnote">btrfs is copy-on-write, like APFS. "home" is Fedora's default btrfs, with zstd compression.</p>
-      </div>
-    ),
   },
   {
     id: 'race',
     title: 'The full race',
     notes:
-      'Replay of the recorded runs, 16 agents each, all on one time scale. Every row is one agent; faint = checkout, solid = install. Linux ext4 is done before you can see it. Windows takes six and a half minutes.',
+      "The recorded runs replayed on one time scale. Linux ext4 is done almost instantly; Windows is still going after six minutes.",
     sources: RACE,
     render: () => (
       <div className="slide">
@@ -275,31 +227,33 @@ export const SLIDES: SlideDef[] = [
     id: 'round-delete',
     title: 'Round: delete',
     poll: 'delete',
-    notes: 'Deleting is the step nobody thinks about. Base: the laptop on ext4, deleting 16 worktrees in under 2 seconds.',
+    notes:
+      "Cleaning up: deleting the 16 worktrees. ext4 takes under 2 seconds. Reveal: the Mac takes 21 times as long, longer than creating them.",
     sources: poll('delete').sources,
     render: (ctx) => <RoundSlide p={poll('delete')} ctx={ctx} />,
   },
   {
     id: 'leaderboard',
     title: 'Leaderboard',
-    notes: 'Announce the winner.',
+    notes:
+      "Announce the winner. Then: so why?",
     render: ({ state }) => <Leaderboard state={state} />,
   },
   {
     id: 'syscalls',
-    title: 'What one agent asks for',
+    title: 'What an install really is',
     notes:
-      'Under the hood. Measured with strace on one agent: checkout is 97 thousand system calls, install 202 thousand (53 thousand of them are hardlinks), delete 215 thousand. Times 16 agents: over 8 million calls, and pnpm 12 runs its installer as a native binary with about 59 threads per install, so roughly 950 threads hit the filesystem at the same moment. Almost none of this is reading or writing data: it is metadata. Creating names, linking, unlinking.',
+      "An install barely moves any data. It's hundreds of thousands of tiny requests to the operating system: create this folder, link this file. One agent: about 200 thousand for the install alone. Sixteen agents at once: millions, all at the same moment. That's why a faster SSD doesn't help: the work is bookkeeping, not data.",
     render: () => (
       <div className="slide">
-        <h2>What one agent asks the kernel to do</h2>
+        <h2>An install is not data. It's paperwork.</h2>
         <div className="calls">
           {SYSCALLS.map((c) => (
             <div className="call-card" key={c.step}>
               <code>{c.step}</code>
               <span className="call-total">
                 <BlockText text={c.total} cell={12} />
-                <small>system calls</small>
+                <small>requests to the OS</small>
               </span>
               <ul>
                 {c.parts.map(([n, what]) => (
@@ -312,9 +266,8 @@ export const SLIDES: SlideDef[] = [
           ))}
         </div>
         <p className="calls-total">
-          × 16 agents: <b>8 million system calls</b>, from about <b>950 threads</b> at once. Nearly all metadata, almost no data.
+          16 agents at once: <b>millions of tiny requests</b>, all at the same moment. A faster SSD doesn't help.
         </p>
-        <p className="footnote">strace -f -c on one agent (Linux). pnpm 12 installs with a native binary: ~59 threads per install.</p>
       </div>
     ),
   },
@@ -322,11 +275,11 @@ export const SLIDES: SlideDef[] = [
     id: 'two-problems',
     title: 'Two different problems',
     notes:
-      'This is the key chart. Two separate questions. Left to right: how expensive is the work for ONE agent, alone on the machine. Bottom to top: when 16 run at once, how much faster is that than running them one after another. The CPU-only baseline gets about 2.5 to 3x on every machine, so the hardware can do parallel work. ext4 is cheap AND parallel. btrfs and xfs are cheap per file but do not parallelize at all: 16 agents take as long as 16 in a row. They queue. The Mac is expensive per file, five times ext4 on a faster CPU, but does scale somewhat. Windows is expensive per file even alone, 27 seconds for one agent, and also does not parallelize.',
+      "Two separate problems. Left to right: how slow is it for ONE agent alone. Bottom to top: how much does running 16 at once help. The dashed line means no help at all: 16 at once take as long as 16 in a row. ext4: cheap and parallel. btrfs: cheap, but agents wait in line. The Mac: every file is expensive. Windows: both.",
     sources: SCATTER.map((s) => s.id),
     render: () => (
       <div className="slide">
-        <h2>Two different problems: cost per file, and queueing</h2>
+        <h2>Two problems: every file is slow, or agents wait in line</h2>
         <Scatter
           points={SCATTER.map((s) => {
             const c = cfg(s.id)
@@ -335,9 +288,9 @@ export const SLIDES: SlideDef[] = [
           width={W}
           height={600}
           xTicks={[0.5, 1, 2, 5, 10, 30]}
-          yTicks={[0, 1, 2, 3, 4]}
-          xLabel="one agent alone: checkout + install (seconds, log scale)"
-          yLabel="speedup from running 16 at once"
+          yTicks={[0, 1, 2, 3]}
+          xLabel="one agent alone (seconds, log scale)"
+          yLabel="how much 16 at once helps"
           xFormat={(v) => `${v} s`}
           yFormat={(v) => `${v}×`}
         />
@@ -346,12 +299,12 @@ export const SLIDES: SlideDef[] = [
   },
   {
     id: 'linux-why',
-    title: 'Linux: where the agents queue',
+    title: 'Linux: ext4 vs btrfs',
     notes:
-      'On Linux we can look inside. I profiled the kernel during the runs with bpftrace: what every thread was doing on the CPU, and where it went to sleep. pnpm made exactly the same calls on all three: hardlinks, mkdir, symlink. The difference is where they queue. ext4: only per-directory locks, and its journal batches many changes into one commit, so nothing global. xfs: every link starts a journal transaction and must reserve log space, under one global lock, the grant head. Half of all waiting during install is right there. btrfs: everything in a subvolume lives in one B-tree. Every unlink locks the root of that tree exclusively; during delete, two thirds of the kernel time is threads spinning on that one lock.',
+      "Same laptop, same requests, so why is ext4 four times faster? It's how each one keeps its records. ext4 updates its records in place and writes its journal in big batches; agents only wait for the folder they're writing into. btrfs never overwrites anything: every change is written as a copy, all the way up one big tree. Every agent has to go through the top of that tree, so they queue. We measured it: btrfs agents spent seven times as long waiting.",
     render: () => (
       <div className="slide">
-        <h2>Linux: same calls, different place to queue</h2>
+        <h2>Same requests, different bookkeeping</h2>
         <ul className="bottlenecks">
           {BOTTLENECKS.map((b) => (
             <li key={b.fs}>
@@ -370,29 +323,7 @@ export const SLIDES: SlideDef[] = [
             </li>
           ))}
         </ul>
-        <p className="footnote">bpftrace on-CPU and off-CPU kernel stacks, 16 agents, Fedora 44, kernel 7.2. Details: lab/ in the repo.</p>
-      </div>
-    ),
-  },
-  {
-    id: 'xfs-proof',
-    title: 'Proof: turn one knob',
-    notes:
-      'If the journal is the bottleneck, changing the journal should change the result. It does. A 1 GB log instead of 64 MB: deleting gets twice as fast, because it was waiting for log space. Install does not move: it is not the space, it is the single lock everyone takes to reserve it; with the bigger log, threads stop sleeping and spin on that lock instead (three quarters of kernel time). Turning off parent pointers, a new xfs feature that adds an extended attribute on every link, makes install 22% faster and delete 60% faster. ext4 for reference.',
-    render: () => (
-      <div className="slide">
-        <h2>Proof: change the journal, change the result</h2>
-        <div className="two-col">
-          <div>
-            <h3 className="chart-title">16 installs</h3>
-            <Bars items={XFS_PROOF.map((r) => ({ id: r.id, label: r.label, value: r.install, color: familyColor(r.family) }))} width={680} labelWidth={250} format={fmtSeconds} />
-          </div>
-          <div>
-            <h3 className="chart-title">16 deletes</h3>
-            <Bars items={XFS_PROOF.map((r) => ({ id: r.id, label: r.label, value: r.remove, color: familyColor(r.family) }))} width={680} labelWidth={250} format={fmtSeconds} />
-          </div>
-        </div>
-        <p className="footnote">Separate profiled runs on fresh 48 GB volumes (lab/), so ext4/xfs differ slightly from the main results.</p>
+        <p className="footnote">Measured by profiling the Linux kernel during the runs (bpftrace). Details in lab/ in the repo.</p>
       </div>
     ),
   },
@@ -400,15 +331,15 @@ export const SLIDES: SlideDef[] = [
     id: 'why-macos',
     title: 'Why: macOS',
     notes:
-      "We can't profile the Mac's kernel the same way, so here is what we measured plus what others measured. One agent alone already costs five times ext4, on a CPU that is three and a half times faster. Almost all of it is kernel time: 86% during install, 99% during delete; 16 deletes burn 195 CPU-seconds where ext4 needs 24. The pnpm team measured that APFS serializes metadata writes across the whole volume: clonefile stays around 6 thousand per second whether you use 1 or 32 threads, and hardlinks get slower with more threads. That is why pnpm clones on the Mac, and why forcing hardlinks was 4 to 6 times slower for us. Caveat to say out loud: an Apple engineer has said blocked time can show up as kernel time, so part of that 99% may be waiting, not working. Linux in a VM on the same Apple chip is several times faster, so it is not the hardware. And Spotlight changed nothing.",
+      "On the Mac, every single file costs more: one agent alone is five times slower than Linux, on a faster CPU. Nearly all that time is inside the operating system, not in pnpm or git. APFS never overwrites its records either, and the pnpm team measured that it doesn't get faster with more threads. Spotlight wasn't it.",
     render: () => (
       <Why
         family="apfs"
         headline="macOS: every file costs more"
         causes={[
-          ['5× the cost, on a faster CPU', 'One agent alone: 4.5 s vs 0.9 s on Linux ext4. The M4 is 3.5× faster on the CPU-only baseline.'],
-          ['Almost all kernel', '86% of install and 99% of delete CPU time is in the kernel. 16 deletes: 195 CPU-seconds, vs 24 on ext4.'],
-          ['One volume, one queue', "pnpm's team measured APFS metadata writes not scaling with threads; hardlinks get slower. Spotlight: no effect."],
+          ['5× slower, on a faster CPU', 'One agent alone: 4.5 s on the Mac, 0.9 s on Linux ext4.'],
+          ['The time is inside macOS', '86% of install time and 99% of delete time is the operating system, not pnpm or git.'],
+          ['Not Spotlight', 'Hiding the folder from Spotlight changed nothing.'],
         ]}
       />
     ),
@@ -417,89 +348,24 @@ export const SLIDES: SlideDef[] = [
     id: 'why-windows',
     title: 'Why: Windows',
     notes:
-      "Windows is slow even with one agent: 27 seconds alone versus 1.4 on Linux on the same laptop. So this is per-file cost first, queueing second. The big per-file toll is Defender real-time protection: a filter driver sits in front of the filesystem and scans synchronously when files are opened and closed. Microsoft's own wording for the normal mode is 'open now, scan now'; Dev Drive's performance mode is 'open now, scan later'. Second: NTFS stores every hard link as another name record inside the target file's 1 KB MFT record, and 16 agents link the same store files. Third, an open question: 16 installs wrote 27 GB to disk. Copying every package would be only 8 GB, and pnpm hardlinks on NTFS, so this is metadata and journaling we have not pinned down. Caveats: one measured run, and we did not get Dev Drive or WSL2 measured.",
+      "Windows is slow even with one agent: 27 seconds versus 1.4 on Linux, same laptop. The main toll is Defender: it checks every file the moment it's opened, before the program can continue. Microsoft's own Dev Drive changes that to check afterwards. We haven't measured Dev Drive yet.",
     render: () => (
       <Why
         family="ntfs"
         headline="Windows: a toll on every file"
         causes={[
-          ['Slow even alone', 'One agent: 27 s, vs 1.4 s on Linux on the same laptop. Per-file cost first, queueing second.'],
-          ['Scanned on every open', 'Defender real-time protection scans synchronously: "open now, scan now". Dev Drive: "open now, scan later".'],
-          ['27 GB written', 'For 16 installs. Copying every package would be 8 GB, and pnpm hardlinks here. NTFS metadata and logging? Open question.'],
+          ['Slow even alone', 'One agent: 27 s on Windows, 1.4 s on Linux, same laptop.'],
+          ['Every file gets checked', 'Defender scans each file when it is opened, and the program waits for it.'],
+          ['Dev Drive: check later', "Microsoft's fix scans after the fact. Not measured here yet."],
         ]}
       />
     ),
   },
   {
-    id: 'myths',
-    title: 'Things you may have heard',
-    notes:
-      "Quick myth check, because this topic is all over YouTube right now, Theo has two videos on it. 'It's the SSD': the Mac's SSD is faster, and Linux vs Windows on the same SSD is 17x. 'Spotlight indexing': the .noindex run changed nothing. 'ext4 can't hardlink, so pnpm copies': wrong, ext4 hardlinks fine, and pnpm 12 even prefers hardlinks over clones on Linux; if you see copies, your store is on another filesystem. 'syspolicyd': real, but it costs at process start, so it hits postinstall scripts; our installs ran no scripts and were still slow. 'Just add more agents': on btrfs, xfs and NTFS, 16 agents finish no sooner than 16 in a row.",
-    render: () => (
-      <div className="slide">
-        <h2>Things you may have heard</h2>
-        <ul className="myths">
-          {MYTHS.map(([verdict, claim, fact]) => (
-            <li key={claim} className={`myth ${verdict}`}>
-              <span className="myth-verdict">{verdict === 'no' ? '✗' : verdict === 'partly' ? '~' : '✓'}</span>
-              <span>
-                <b>{claim}</b>
-                {fact}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    ),
-  },
-  {
-    id: 'git-race',
-    title: 'Bonus: git breaks',
-    notes:
-      'Found while benchmarking. git worktree add reads the admin directories of other worktrees. If a sibling is half-created, it fails, with errno 0, hence the message "Success". Agent harnesses need to retry or serialize worktree creation.',
-    sources: configs.map((c) => c.id),
-    render: () => {
-      const withRetries = configs
-        .map((c) => ({ c, r: Object.values(c.retries).reduce((a, b) => a + b, 0) }))
-        .filter((x) => x.r > 0)
-        .sort((a, b) => b.r - a.r)
-      return (
-        <div className="slide">
-          <h2>Start 16 at once and git itself trips over</h2>
-          <pre className="terminal">
-            <span className="term-dim">$ git worktree add --detach wt/13</span>
-            {'\n'}Preparing worktree (detached HEAD e91c705)
-            {'\n'}
-            <span className="term-err">fatal: failed to read .git/worktrees/11/commondir: Success</span>
-          </pre>
-          <p className="lead">
-            Creating a worktree reads every sibling's metadata. Catch one half-created and git gives up, reporting "Success". The benchmark retries, like an
-            agent harness should.
-          </p>
-          {withRetries.length > 0 && (
-            <ul className="retries">
-              {withRetries.slice(0, 6).map(({ c, r }) => (
-                <li key={c.id}>
-                  <span className="retry-cells">
-                    {Array.from({ length: Math.min(r, 24) }, (_, k) => (
-                      <i key={k} style={{ background: familyColor(c.family) }} />
-                    ))}
-                  </span>
-                  <span>
-                    {c.name} <b>{r}</b>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )
-    },
-  },
-  {
     id: 'takeaways',
     title: 'What to do about it',
-    notes: 'Each tip points at a slide we just saw.',
+    notes:
+      "Run fewer, reuse worktrees, and pick the filesystem on purpose.",
     render: () => (
       <div className="slide">
         <h2>Running many agents? Pick your filesystem on purpose.</h2>
@@ -507,13 +373,13 @@ export const SLIDES: SlideDef[] = [
           <li>
             <i style={{ background: INK.primary }} />
             <span>
-              <b>More agents isn't free.</b> On btrfs, xfs and NTFS, 16 at once finish no sooner than 16 in a row: they queue inside the kernel.
+              <b>More agents isn't free.</b> On btrfs and Windows, 16 at once finish no sooner than 16 in a row.
             </span>
           </li>
           <li>
             <i style={{ background: INK.primary }} />
             <span>
-              <b>Reuse worktrees</b> instead of creating and deleting them. Deleting is metadata work too, and on the Mac it took longer than creating.
+              <b>Reuse worktrees</b> instead of creating and deleting them. On the Mac, deleting took longer than creating.
             </span>
           </li>
           <li>
@@ -541,7 +407,8 @@ export const SLIDES: SlideDef[] = [
   {
     id: 'thanks',
     title: 'Thanks',
-    notes: 'Repo link; it runs on macOS, Linux, Windows and WSL with one command.',
+    notes:
+      "One command on macOS, Linux, Windows and WSL. Data and slides are in the repo. Thanks!",
     render: () => (
       <div className="slide thanks">
         <BlockText text={'RUN IT\nYOURSELF'} cell={22} />
@@ -551,10 +418,6 @@ export const SLIDES: SlideDef[] = [
     ),
   },
 ]
-
-function fsBar(c: Config, value: number) {
-  return { id: c.id, label: c.stackName, value, color: familyColor(c.family) }
-}
 
 function Why({ family, headline, causes }: { family: string; headline: string; causes: [string, string][] }) {
   return (

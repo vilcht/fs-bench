@@ -319,6 +319,8 @@ def main():
             print(f"skip {os.path.basename(run_dir)}: label '{run['label']}' not in machines.json", file=sys.stderr)
             continue
         cid = f"{m['key']}:{stack_of(run['os'], run['fs'], run['scanner'], run['site'])}"
+        if cid in cfg.get("exclude", []):
+            continue
         if cid in real:
             print(f"note {cid}: newer run {os.path.basename(run_dir)} replaces an older one", file=sys.stderr)
         run["dir"] = os.path.basename(run_dir)
@@ -330,6 +332,7 @@ def main():
         machine_key, stack = cid.split(":", 1)
         m = machines[machine_key]
         stack_name, family = stack_meta(machine_key, stack)
+        stack_name = cfg.get("stackNames", {}).get(cid, stack_name)
         run = real.get(cid)
         if run:
             data = {k: run[k] for k in ["ns", "phases", "cpu", "retries", "failures", "race", "resources", "resourcesFromWarmup"]}
