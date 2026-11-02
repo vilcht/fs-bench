@@ -125,8 +125,13 @@ def load_run(run_dir):
     samples = load_samples(os.path.join(run_dir, "samples.csv"))
     batches = {}
     failures = defaultdict(int)
+    warmup_res = defaultdict(lambda: defaultdict(list))
     for r in rows:
-        if r["rep"] == "0" or r["phase"] == "store_warm":
+        if r["phase"] == "store_warm":
+            continue
+        if r["rep"] == "0":
+            if r["method"] == METHOD and r["ok"] == "1":
+                collect_resources(warmup_res[(r["phase"], int(r["n"]))], r, samples)
             continue
         n = int(r["n"])
         if r["ok"] != "1":
@@ -143,11 +148,25 @@ def load_run(run_dir):
     ns = sorted({n for _, n in times})
     phases = {p: {str(n): median(times[(p, n)]) for n in ns if times[(p, n)]} for p in PHASES}
     top = ns[-1] if ns else None
-    resources = {
-        p: {k: round(median(v), 1) for k, v in res[(p, top)].items() if v}
-        for p in ["worktree_add", "install", "remove"]
-        if top and res[(p, top)]
-    }
+    resources_from_warmup = False
+    resources = {}
+    for p in ["worktree_add", "install", "remove"]:
+        if not top:
+            continue
+        acc = dict(res[(p, top)])
+        # The sampler can die before the measured reps (it did on Windows); the warmup is a full
+        # run too, so fall back to its machine-wide figures rather than show nothing.
+        if not acc.get("busy_pct") and warmup_res[(p, top)].get("busy_pct"):
+            for k in ("busy_pct", "mem_mb", "disk_mb"):
+                acc[k] = warmup_res[(p, top)].get(k, [])
+            resources_from_warmup = True
+        if first["os"] == "Windows":
+            # Git Bash's `times` can't see native Windows processes: a few CPU-seconds for minutes
+            # of pnpm. Leave the per-process CPU figures out rather than show nonsense.
+            acc.pop("cpu_s", None)
+            acc.pop("kernel_pct", None)
+        if any(acc.values()):
+            resources[p] = {k: round(median(v), 1) for k, v in acc.items() if v}
 
     retries = defaultdict(int)
     for log in glob.glob(os.path.join(run_dir, "logs", f"{METHOD}-worktree_add-n*-r*-*.log")):
@@ -167,6 +186,7 @@ def load_run(run_dir):
         "cpu": {str(n): median(v) for n, v in sorted(cpu.items())},
         "retries": dict(retries),
         "resources": resources,
+        "resourcesFromWarmup": resources_from_warmup,
         "failures": {f"{p}@{n}": c for (p, n), c in failures.items()},
         "race": load_race(run_dir, batches, times, ns),
     }
@@ -312,7 +332,7 @@ def main():
         stack_name, family = stack_meta(machine_key, stack)
         run = real.get(cid)
         if run:
-            data = {k: run[k] for k in ["ns", "phases", "cpu", "retries", "failures", "race", "resources"]}
+            data = {k: run[k] for k in ["ns", "phases", "cpu", "retries", "failures", "race", "resources", "resourcesFromWarmup"]}
             if not data["resources"]:
                 data["resources"] = mock_config(cid, rng)["resources"]
                 data["resourcesMock"] = True

@@ -1,12 +1,11 @@
 import { Fragment, type ReactNode } from 'react'
-import { type Config, NS, type Resources, cfg, configs, phaseTime, setupTime } from '../shared/data'
+import { type Config, type Resources, cfg, configs, phaseTime, setupTime } from '../shared/data'
 import { METRIC_LABEL, POLLS, type Poll, ZERO_AT, describeRatio, fmtRatio, metricValue, poll } from '../shared/polls'
 import type { RoomState } from '../shared/protocol'
 import { BlockText } from './blocks/BlockText'
 import { SectorField } from './blocks/SectorField'
 import { Bars } from './charts/Bars'
 import { Guesses } from './charts/Guesses'
-import { Lines } from './charts/Lines'
 import { Race } from './charts/Race'
 import { JoinCard } from './JoinCard'
 import { INK, familyColor, fmtSeconds } from './theme'
@@ -36,16 +35,15 @@ const REPO_URL = 'github.com/vilcht/fs-bench'
 const W = 1408 // content width inside the slide padding
 
 const RACE_LABELS: Record<string, string> = {
-  'macbook:apfs': 'MacBook · macOS',
-  'desktop:ext4': 'Desktop · Linux',
-  'huawei:home-ext4': 'Huawei · Linux',
-  'desktop-win:ntfs': 'Desktop · Windows',
+  'huawei:ext4': 'Laptop · Linux ext4',
+  'huawei:home-btrfs': 'Laptop · Linux btrfs',
+  'macbook:apfs': 'MacBook Air · macOS',
+  'huawei-win:ntfs': 'Laptop · Windows',
 }
 
-const RACE = ['desktop:ext4', 'huawei:home-ext4', 'macbook:apfs', 'desktop-win:ntfs']
-const RESOURCE_ROWS = ['desktop:ext4', 'huawei:home-ext4', 'macbook:apfs', 'macmini:apfs', 'desktop-win:ntfs', 'desktop-win:devdrive', 'desktop-wsl:home-ext4']
-const SCALING = ['macbook:apfs', 'macmini:apfs', 'desktop:ext4', 'huawei:home-ext4', 'desktop-win:ntfs']
-const LINUX_FS = ['desktop:ext4', 'desktop:xfs', 'desktop:btrfs']
+const RACE = ['huawei:ext4', 'huawei:home-btrfs', 'macbook:apfs', 'huawei-win:ntfs']
+const RESOURCE_ROWS = ['huawei:ext4', 'huawei:home-btrfs', 'huawei:xfs', 'macbook:apfs', 'huawei-win:ntfs']
+const LINUX_FS = ['huawei:ext4', 'huawei:btrfs', 'huawei:home-btrfs', 'huawei:xfs']
 
 export const SLIDES: SlideDef[] = [
   {
@@ -106,14 +104,12 @@ export const SLIDES: SlideDef[] = [
     id: 'lineup',
     title: 'The lineup',
     notes:
-      'Same l2beat commit, same Node and pnpm everywhere, offline installs from a warm store, so the network is out of the picture. 1, 2, 4, 8 and 16 agents at once, three reps each, median. Plus a CPU-only baseline so we can tell slow disks from slow CPUs.',
+      'The main character is one Huawei laptop, dual-booted: Fedora Linux and Windows 11, same CPU, same SSD. Against it, a MacBook Air M4, also a 16 GB laptop. Same l2beat commit, same Node and pnpm everywhere, offline installs from a warm store, so the network is out of the picture. 1, 2, 4, 8 and 16 agents at once. Linux and Mac: median of 3 runs. Windows: 1 run, it took over an hour.',
     render: () => {
       const machines = [...new Map(configs.map((c) => [c.machine, c])).values()]
       return (
         <div className="slide">
-          <h2>
-            {machines.length} machines, {configs.length} setups. Same repo, same commit, same tools.
-          </h2>
+          <h2>One laptop, two operating systems. And a MacBook.</h2>
           <ul className="lineup">
             {machines.map((m) => (
               <li key={m.machine}>
@@ -132,7 +128,10 @@ export const SLIDES: SlideDef[] = [
               </li>
             ))}
           </ul>
-          <p className="footnote">Checkout → install → status → delete, with 1, 2, 4, 8 and 16 agents at once. Offline installs, median of 3 runs.</p>
+          <p className="footnote">
+            Same repo, commit, Node and pnpm. Checkout → install → status → delete, with 1, 2, 4, 8 and 16 agents at once. Offline installs. Median of 3
+            runs (Windows: 1 run, it took over an hour).
+          </p>
         </div>
       )
     },
@@ -145,157 +144,123 @@ export const SLIDES: SlideDef[] = [
     render: () => <HowToPlay />,
   },
   {
-    id: 'round-huawei',
-    title: 'Round: Huawei laptop',
-    poll: 'huawei',
-    notes: 'Same OS, same filesystem, a laptop CPU and laptop SSD. Most people guess way slower.',
-    sources: poll('huawei').sources,
-    render: (ctx) => <RoundSlide p={poll('huawei')} ctx={ctx} />,
-  },
-  {
     id: 'round-macbook',
     title: 'Round: MacBook',
     poll: 'macbook',
-    notes: 'The Mac enters. Base is the Huawei laptop, the closest hardware class.',
+    notes:
+      'Base: the Huawei laptop on Fedora, its default btrfs home. The MacBook Air has the faster CPU: about 3x faster on our CPU-only baseline. Most people guess the Mac wins.',
     sources: poll('macbook').sources,
     render: (ctx) => <RoundSlide p={poll('macbook')} ctx={ctx} />,
-  },
-  {
-    id: 'scaling',
-    title: 'Cost per agent',
-    notes:
-      'Total time divided by agents. Flat or falling means the machine keeps up: running in parallel is free. Rising means agents are queueing behind each other inside the OS.',
-    sources: SCALING,
-    render: () => (
-      <div className="slide">
-        <h2>Seconds per agent, as more agents start at once</h2>
-        <Lines
-          series={SCALING.map((id) => {
-            const c = cfg(id)
-            return { id, label: c.name, color: familyColor(c.family), points: NS.map((n) => ({ x: n, y: setupTime(c, n) / n })) }
-          })}
-          xs={NS}
-          width={W}
-          height={600}
-          yFormat={(v) => `${v.toFixed(v < 10 ? 1 : 0)} s`}
-          xLabel="agents starting at once"
-        />
-      </div>
-    ),
-  },
-  {
-    id: 'why-macos',
-    title: 'Why: macOS',
-    notes:
-      'YOUR EXPLANATION. Points to verify before presenting: (1) APFS metadata is copy-on-write B-trees, so each create/delete rewrites tree nodes rather than updating in place. (2) Spotlight (mds) indexes new files; XProtect / endpoint security see file events. The .noindex runs isolate Spotlight. (3) Per-call kernel overhead: an install is hundreds of thousands of small file system calls.',
-    render: () => (
-      <Why
-        family="apfs"
-        headline="Where the time goes on a Mac"
-        causes={[
-          ['Copy-on-write metadata', 'APFS never updates metadata in place. Every file created or deleted rewrites parts of its B-trees.'],
-          ['Someone reads every new file', 'Spotlight indexes what you write, and security scanning sees every file event. 53k files per install.'],
-          ['Small calls, many of them', 'An install is a storm of tiny open, mkdir, link and stat calls. Per-call overhead decides the result.'],
-        ]}
-      />
-    ),
   },
   {
     id: 'round-spotlight',
     title: 'Round: Spotlight off',
     poll: 'spotlight',
-    notes: 'Any folder whose name ends in .noindex is skipped by Spotlight. Same Mac, same disk, only the folder name changes.',
+    notes:
+      'Any folder whose name ends in .noindex is skipped by Spotlight. Same Mac, same disk, only the folder name changes. Reveal: no difference. Spotlight is not the culprit. (Honest caveat: the .noindex pass ran second, on a fanless Air that had warmed up; its CPU baseline got about 30% slower. Even so, nothing points at Spotlight.)',
     sources: poll('spotlight').sources,
     render: (ctx) => <RoundSlide p={poll('spotlight')} ctx={ctx} />,
   },
   {
-    id: 'linux-fs',
-    title: 'Copy-on-write on Linux too',
+    id: 'why-macos',
+    title: 'Why: macOS',
     notes:
-      'Linux is not magic either. btrfs is copy-on-write like APFS, and on the same disk it is the slowest of the three. Same hardware, same kernel, only the filesystem changes.',
-    sources: LINUX_FS,
+      'YOUR EXPLANATION. Data: kernel share of the benchmark processes\' CPU time was 86-91% during install and 98-99% during delete, versus 1% for the CPU-only baseline. Points to verify before presenting: (1) APFS metadata is copy-on-write B-trees, so each create/delete rewrites tree nodes rather than updating in place. (2) Per-call kernel overhead: an install is hundreds of thousands of small file system calls. Forcing pnpm to hardlink instead of clone made it 4-6x slower still.',
     render: () => (
-      <div className="slide">
-        <h2>Same disk, same kernel. Only the filesystem changes.</h2>
-        <div className="two-col">
-          <div>
-            <h3 className="chart-title">16 agents: checkout + install</h3>
-            <Bars items={LINUX_FS.map((id) => fsBar(cfg(id), setupTime(cfg(id), 16)))} width={680} labelWidth={110} format={fmtSeconds} />
-          </div>
-          <div>
-            <h3 className="chart-title">16 agents: delete worktrees</h3>
-            <Bars items={LINUX_FS.map((id) => fsBar(cfg(id), phaseTime(cfg(id), 'remove', 16)))} width={680} labelWidth={110} format={fmtSeconds} />
-          </div>
-        </div>
-        <p className="footnote">btrfs is copy-on-write, like APFS.</p>
-      </div>
+      <Why
+        family="apfs"
+        headline="Where the time goes on a Mac"
+        causes={[
+          ['Inside the kernel, not Spotlight', '86% of the install CPU time and 99% of the delete CPU time is the kernel. Hiding the folder from Spotlight changed nothing.'],
+          ['Copy-on-write metadata', 'APFS never updates metadata in place. Every file created or deleted rewrites parts of its B-trees.'],
+          ['Small calls, many of them', 'An install is a storm of tiny open, mkdir, clone and stat calls. Per-call overhead decides the result.'],
+        ]}
+      />
     ),
   },
   {
     id: 'round-windows',
     title: 'Round: Windows',
     poll: 'windows',
-    notes: 'Same desktop, dual boot. Linux ext4 vs Windows NTFS with Defender on.',
+    notes:
+      'The same Huawei laptop, dual boot: Fedora vs Windows 11, NTFS with Defender real-time protection on, as it ships. Same CPU, same SSD. Expect people to guess 2-3x; the slider goes to 30x for a reason.',
     sources: poll('windows').sources,
     render: (ctx) => <RoundSlide p={poll('windows')} ctx={ctx} />,
-  },
-  {
-    id: 'round-devdrive',
-    title: 'Round: Dev Drive',
-    poll: 'devdrive',
-    notes: 'Microsoft\'s fix for exactly this: ReFS plus Defender in performance mode.',
-    sources: poll('devdrive').sources,
-    render: (ctx) => <RoundSlide p={poll('devdrive')} ctx={ctx} />,
-  },
-  {
-    id: 'round-wsl',
-    title: 'Round: WSL2',
-    poll: 'wsl',
-    notes: 'The repo lives inside WSL2: a real Linux kernel and ext4 on a virtual disk.',
-    sources: poll('wsl').sources,
-    render: (ctx) => <RoundSlide p={poll('wsl')} ctx={ctx} />,
-  },
-  {
-    id: 'race',
-    title: 'The full race',
-    notes: 'Replay of the recorded runs, 16 agents each. Every row is one agent; faint = checkout, solid = install.',
-    sources: RACE,
-    render: () => (
-      <div className="slide">
-        <h2>Sixteen agents, four machines, one replay</h2>
-        <Race configs={RACE.map((id) => cfg(id))} phases={['worktree_add', 'install']} width={W} playing labels={RACE_LABELS} />
-      </div>
-    ),
   },
   {
     id: 'why-windows',
     title: 'Why: Windows',
     notes:
-      "YOUR EXPLANATION. Points to verify: Defender real-time protection is a filter driver that inspects file opens and writes. Dev Drive = ReFS + Defender performance mode (asynchronous scanning), Microsoft's own answer to exactly this. WSL2 is a real Linux kernel with ext4 on a virtual disk: fast, as long as the files live inside it and not on /mnt/c.",
+      "YOUR EXPLANATION. Data: one measured run (the full run took over an hour, so it was stopped early). 16 installs moved 31 GB through the disk on Windows vs 1.5 GB on Linux ext4 on the same laptop (Windows figure from the warmup rep: the resource sampler stopped before the measured rep). Points to verify: Defender real-time protection is a filter driver that inspects file opens and writes. Dev Drive = ReFS + Defender performance mode (asynchronous scanning). WSL2 = real Linux kernel with ext4 on a virtual disk, fast as long as the files live inside it, not on /mnt/c. Dev Drive and WSL2 were NOT measured: the Dev Drive check failed with access denied.",
     render: () => (
       <Why
         family="ntfs"
         headline="Where the time goes on Windows"
         causes={[
-          ['A scanner on every write', "Defender's real-time protection sits between every program and the disk, and looks at each new file."],
-          ['Dev Drive', 'ReFS plus Defender in performance mode: scans happen after the write, not in its way.'],
-          ['WSL2', 'A real Linux kernel and ext4 in a virtual disk. Fast, as long as the repo lives inside it, not on /mnt/c.'],
+          ['A scanner on every write', "Defender's real-time protection sits between every program and the disk, and looks at each new file. 53k per install."],
+          ['31 GB through the disk', 'Same laptop, same 16 installs: 31 GB read and written on Windows, 1.5 GB on Linux with ext4.'],
+          ['Next to measure', "Microsoft's own fixes: a Dev Drive (ReFS, scanning out of the way) or WSL2 (Linux ext4 in a virtual disk)."],
         ]}
       />
+    ),
+  },
+  {
+    id: 'round-ext4',
+    title: 'Round: ext4',
+    poll: 'ext4',
+    notes: 'Back to Linux. Fedora installs btrfs by default. Same laptop, same kernel, the work directory on an ext4 volume instead.',
+    sources: poll('ext4').sources,
+    render: (ctx) => <RoundSlide p={poll('ext4')} ctx={ctx} />,
+  },
+  {
+    id: 'linux-fs',
+    title: 'Same laptop, four filesystems',
+    notes:
+      'Linux is not magic either: only ext4 keeps up. btrfs is copy-on-write like APFS (the home one also compresses with zstd). xfs is the surprise: slowest to install, with the CPU mostly idle (25% busy), so it is waiting rather than working. Deleting: ext4 under 2 s, everything else about 15 s.',
+    sources: LINUX_FS,
+    render: () => (
+      <div className="slide">
+        <h2>Same laptop, same kernel. Only the filesystem changes.</h2>
+        <div className="two-col">
+          <div>
+            <h3 className="chart-title">16 agents: checkout + install</h3>
+            <Bars items={LINUX_FS.map((id) => fsBar(cfg(id), setupTime(cfg(id), 16)))} width={680} labelWidth={150} format={fmtSeconds} />
+          </div>
+          <div>
+            <h3 className="chart-title">16 agents: delete worktrees</h3>
+            <Bars items={LINUX_FS.map((id) => fsBar(cfg(id), phaseTime(cfg(id), 'remove', 16)))} width={680} labelWidth={150} format={fmtSeconds} />
+          </div>
+        </div>
+        <p className="footnote">btrfs is copy-on-write, like APFS. "home" is Fedora's default btrfs, with zstd compression.</p>
+      </div>
+    ),
+  },
+  {
+    id: 'race',
+    title: 'The full race',
+    notes:
+      'Replay of the recorded runs, 16 agents each, all on one time scale. Every row is one agent; faint = checkout, solid = install. Linux ext4 is done before you can see it. Windows takes six and a half minutes.',
+    sources: RACE,
+    render: () => (
+      <div className="slide">
+        <h2>Sixteen agents, one replay</h2>
+        <Race configs={RACE.map((id) => cfg(id))} phases={['worktree_add', 'install']} width={W} playing labels={RACE_LABELS} />
+      </div>
     ),
   },
   {
     id: 'round-delete',
     title: 'Round: delete',
     poll: 'delete',
-    notes: 'Deleting is the step nobody thinks about. Base: the Linux desktop deleting 16 worktrees.',
+    notes: 'Deleting is the step nobody thinks about. Base: the laptop on ext4, deleting 16 worktrees in under 2 seconds.',
     sources: poll('delete').sources,
     render: (ctx) => <RoundSlide p={poll('delete')} ctx={ctx} />,
   },
   {
     id: 'resources',
     title: 'What the machine was doing',
-    notes: 'Install phase, 16 agents at once. CPU busy is machine-wide; kernel share is how much of the benchmark processes\' CPU time went to the OS rather than git or pnpm. High kernel share = filesystem work inside the OS. Windows has no kernel split (Git Bash cannot see native process times).',
+    notes:
+      "Install phase, 16 agents at once. CPU busy is machine-wide; kernel share is how much of the benchmark processes' CPU time went to the OS rather than git or pnpm. High kernel share = filesystem work inside the OS. Windows: no kernel split (Git Bash cannot see native process times), and its figures come from the warmup run because the sampler stopped before the measured one.",
     sources: RESOURCE_ROWS,
     resources: true,
     render: () => <ResourceGrid />,
@@ -347,7 +312,7 @@ export const SLIDES: SlideDef[] = [
   {
     id: 'takeaways',
     title: 'What to do about it',
-    notes: 'Adjust to what the final data shows. Each tip should point at a slide we just saw.',
+    notes: 'Each tip points at a slide we just saw.',
     render: () => (
       <div className="slide">
         <h2>Running many agents? Pick your filesystem on purpose.</h2>
@@ -355,31 +320,25 @@ export const SLIDES: SlideDef[] = [
           <li>
             <i style={{ background: INK.primary }} />
             <span>
-              <b>Reuse worktrees</b> instead of creating and deleting them. Deleting is often the slowest step.
+              <b>Reuse worktrees</b> instead of creating and deleting them. On the Mac, deleting 16 took longer than creating them.
             </span>
           </li>
           <li>
-            <i style={{ background: INK.primary }} />
+            <i style={{ background: familyColor('ntfs') }} />
             <span>
-              <b>Stagger agent starts</b> a little. Less contention, and git stops tripping over itself.
-            </span>
-          </li>
-          <li>
-            <i style={{ background: familyColor('apfs') }} />
-            <span>
-              <b>macOS:</b> keep worktrees in a folder ending in <code>.noindex</code>.
-            </span>
-          </li>
-          <li>
-            <i style={{ background: familyColor('refs') }} />
-            <span>
-              <b>Windows:</b> a Dev Drive or WSL2, never node_modules on scanned NTFS.
+              <b>Windows:</b> keep repos off scanned NTFS. 17× slower than Linux on the same laptop. Try a Dev Drive or WSL2.
             </span>
           </li>
           <li>
             <i style={{ background: familyColor('ext4') }} />
             <span>
-              <b>Linux:</b> ext4 or xfs for the work directory, and the pnpm store on the same filesystem.
+              <b>Linux:</b> ext4 for the work directory, with the pnpm store on the same filesystem. 4× faster than Fedora's default btrfs.
+            </span>
+          </li>
+          <li>
+            <i style={{ background: familyColor('apfs') }} />
+            <span>
+              <b>macOS:</b> keep pnpm's default import method (clones). Forcing hardlinks was 4–6× slower.
             </span>
           </li>
         </ul>
@@ -621,6 +580,11 @@ function ResourceGrid() {
           </Fragment>
         ))}
       </div>
+      {rows.some((c) => c.resourcesFromWarmup) && (
+        <p className="footnote">
+          Windows: no kernel split (Git Bash can't see native process times); CPU, RAM and disk from the warmup run.
+        </p>
+      )}
     </div>
   )
 }

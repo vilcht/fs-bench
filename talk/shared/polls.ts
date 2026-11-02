@@ -42,13 +42,11 @@ function round(id: string, base: string, target: string, metric: Metric, prompt:
 }
 
 export const POLLS: Poll[] = [
-  round('huawei', 'desktop:ext4', 'huawei:home-ext4', 'setup', 'A laptop, also on Linux'),
-  round('macbook', 'huawei:home-ext4', 'macbook:apfs', 'setup', 'Enter the Mac'),
+  round('macbook', 'huawei:home-btrfs', 'macbook:apfs', 'setup', 'Two laptops. Enter the MacBook Air'),
   round('spotlight', 'macbook:apfs', 'macbook:apfs-noindex', 'setup', 'Same MacBook, worktrees in a folder Spotlight skips'),
-  round('windows', 'desktop:ext4', 'desktop-win:ntfs', 'setup', 'Same desktop PC, booted into Windows'),
-  round('devdrive', 'desktop-win:ntfs', 'desktop-win:devdrive', 'setup', 'Same Windows, repo on a Dev Drive'),
-  round('wsl', 'desktop-win:devdrive', 'desktop-wsl:home-ext4', 'setup', 'Same Windows, repo inside WSL2'),
-  round('delete', 'desktop:ext4', 'macbook:apfs', 'remove', 'Cleaning up: delete all 16 worktrees'),
+  round('windows', 'huawei:home-btrfs', 'huawei-win:ntfs', 'setup', 'Same laptop, booted into Windows'),
+  round('ext4', 'huawei:home-btrfs', 'huawei:ext4', 'setup', 'Same laptop, same Linux, ext4 instead of btrfs'),
+  round('delete', 'huawei:ext4', 'macbook:apfs', 'remove', 'Cleaning up: delete all 16 worktrees'),
 ]
 
 export function poll(id: string): Poll {

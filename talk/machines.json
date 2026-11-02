@@ -1,57 +1,32 @@
 {
-  "_comment": "Maps benchmark labels to machines on the slides. Run the Macs with LABEL=macbook / LABEL=macmini so the two don't collide. 'expected' lists the configs the deck needs; any without real results get mock data, flagged on every slide that shows them.",
+  "_comment": "Maps benchmark labels to machines on the slides. 'expected' lists the configs the deck needs; any without real results get mock data, flagged on every slide that shows them. The deck compares one laptop (Huawei) on Linux and Windows with a MacBook Air; the Ryzen desktop runs stay in results/ but aren't mapped, so they're left out of the slides.",
   "machines": [
-    {
-      "key": "macbook",
-      "name": "MacBook",
-      "detail": "MacBook Air · Apple M4 · 16 GB",
-      "labels": ["macbook", "apple-m4-macos"]
-    },
-    {
-      "key": "macmini",
-      "name": "Mac mini",
-      "detail": "Apple M? · ? GB",
-      "labels": ["macmini"]
-    },
-    {
-      "key": "desktop",
-      "name": "Desktop",
-      "detail": "Ryzen 5 5600X · Kingston KC3000",
-      "labels": ["amd-ryzen-5-5600x-linux", "desktop-5600x"]
-    },
-    {
-      "key": "desktop-win",
-      "name": "Desktop (Windows)",
-      "detail": "Ryzen 5 5600X · WD SN850X",
-      "labels": ["amd-ryzen-5-5600x-windows"]
-    },
-    {
-      "key": "desktop-wsl",
-      "name": "Desktop (WSL2)",
-      "detail": "Ryzen 5 5600X · WD SN850X",
-      "labels": ["amd-ryzen-5-5600x-wsl"]
-    },
     {
       "key": "huawei",
       "name": "Huawei laptop",
-      "detail": "Core Ultra 5 125H",
+      "detail": "Core Ultra 5 125H · 16 GB · WD SN740",
       "labels": ["intel-core-ultra-5-125h-linux"]
+    },
+    {
+      "key": "huawei-win",
+      "name": "Huawei laptop (Windows)",
+      "detail": "Core Ultra 5 125H · 16 GB · WD SN740",
+      "labels": ["ntfs", "intel-core-ultra-5-125h-windows"]
+    },
+    {
+      "key": "macbook",
+      "name": "MacBook Air",
+      "detail": "Apple M4 · 16 GB",
+      "labels": ["macbook", "apple-m4-macos"]
     }
   ],
   "expected": [
-    "macbook:apfs",
-    "macbook:apfs-noindex",
-    "macmini:apfs",
-    "macmini:apfs-noindex",
-    "desktop:home-btrfs",
-    "desktop:ext4",
-    "desktop:xfs",
-    "desktop:btrfs",
-    "huawei:home-ext4",
+    "huawei:home-btrfs",
     "huawei:ext4",
+    "huawei:xfs",
     "huawei:btrfs",
-    "desktop-win:ntfs",
-    "desktop-win:devdrive",
-    "desktop-wsl:home-ext4"
+    "huawei-win:ntfs",
+    "macbook:apfs",
+    "macbook:apfs-noindex"
   ]
 }

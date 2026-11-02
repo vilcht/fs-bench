@@ -33,6 +33,8 @@ export interface Config {
   /** Median resource use per phase at the highest agent count. */
   resources: Partial<Record<Phase, Resources>>
   resourcesMock?: boolean
+  /** Machine-wide resource figures come from the warmup rep (the sampler died before the measured reps). */
+  resourcesFromWarmup?: boolean
 }
 
 export interface Resources {

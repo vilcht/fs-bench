@@ -285,7 +285,9 @@ function VotePanel({
   return (
     <div className="vote">
       <div className="vote-q">
-        {target.machineName} <span className="muted">vs</span> {base.machineName}
+        {/* Same machine on both sides (Spotlight, ext4 rounds): name the setups instead. */}
+        {base.machine === target.machine ? target.stackName : target.machineName} <span className="muted">vs</span>{' '}
+        {base.machine === target.machine ? base.stackName : base.machineName}
       </div>
       <div className="vote-known">
         {base.name}: <b>{fmtSeconds(metricValue(base, p.metric))}</b>
