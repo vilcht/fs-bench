@@ -347,7 +347,7 @@ function JoinForm({ onJoin, error }: { onJoin: (name: string) => void; error: st
           if (name.trim()) onJoin(name.trim())
         }}
       >
-        <h1>16 agents, one SSD</h1>
+        <h1>On worktrees and filesystems</h1>
         <p className="muted">Pick a name for the leaderboard.</p>
         <input autoFocus maxLength={24} value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" />
         <button type="submit" disabled={!name.trim()}>

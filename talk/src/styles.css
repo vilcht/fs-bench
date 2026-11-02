@@ -407,3 +407,4 @@ input[type='range'] { width: 100%; accent-color: var(--ink); }
 .draft-controls button:disabled { opacity: 0.35; cursor: default; }
 @media (max-width: 900px) { .draft-main { grid-template-columns: 1fr; } }
 .load-note { margin-top: 26px; max-width: none; } .load-note + .footnote { margin-top: 14px; }
+.title-and { display: block; font-family: var(--display); font-size: 64px; font-weight: 820; font-stretch: 115%; line-height: 1; color: var(--ink); margin-bottom: 18px; }

@@ -84,8 +84,9 @@ export const SLIDES: SlideDef[] = [
     seconds: 25,
     render: ({ state, joinUrl }) => (
       <div className="slide bleed">
-        <SectorField title={'16 AGENTS\nONE SSD'} col={4} row={4} />
+        <SectorField title={'ON\nWORKTREES'} col={4} row={4} />
         <p className="title-sub">
+          <span className="title-and">and filesystems</span>
           Every coding agent wants its own copy of the repo. What happens to your machine when sixteen of them start at once?
         </p>
         <JoinCard url={joinUrl} players={state?.players ?? 0} />
