@@ -22,6 +22,8 @@ export interface SlideDef {
   /** Poll slides have two steps: 0 = voting open, 1 = revealed. */
   poll?: string
   notes: string
+  /** Target speaking time, from SCRIPT.md. */
+  seconds?: number
   /** Config ids drawn on the slide; any mock among them puts a MOCK DATA badge on it. */
   sources?: string[]
   /** Full-bleed slides draw their own background. */
@@ -68,7 +70,8 @@ export const SLIDES: SlideDef[] = [
     title: 'Title',
     bleed: true,
     notes:
-      "Hi! Ten minutes on why the machine you run coding agents on matters more than you think. Join on your phone now: there's a game with points.",
+      "\"Ten minutes on why the machine you run coding agents on matters more than you think. Scan the code, there's a game with points.\"",
+    seconds: 25,
     render: ({ state, joinUrl }) => (
       <div className="slide bleed">
         <SectorField title={'16 AGENTS\nONE SSD'} col={4} row={4} />
@@ -83,7 +86,8 @@ export const SLIDES: SlideDef[] = [
     id: 'workflow',
     title: 'One agent, one worktree',
     notes:
-      "Every agent gets its own copy of the repo, a git worktree, and runs pnpm install in it. Each square is a thousand files. Sixteen agents: over a million files created and deleted.",
+      "\"Every agent gets its own copy of the repo and runs pnpm install in it. Each square is a thousand files. Sixteen agents: over a million files created and deleted.\"",
+    seconds: 25,
     render: () => (
       <div className="slide">
         <h2>One agent = one worktree = one install</h2>
@@ -122,7 +126,8 @@ export const SLIDES: SlideDef[] = [
     id: 'lineup',
     title: 'The lineup',
     notes:
-      "One laptop, dual-booted: Linux and Windows. Same CPU, same SSD. Plus a MacBook Air M4. Same repo, same tools, offline installs, so the network doesn't matter.",
+      "\"One laptop, dual-booted Linux and Windows: same CPU, same SSD. Plus a MacBook Air. Same repo, same tools, offline installs.\"",
+    seconds: 15,
     render: () => {
       const machines = [...new Map(configs.map((c) => [c.machine, c])).values()]
       return (
@@ -158,7 +163,8 @@ export const SLIDES: SlideDef[] = [
     id: 'how-to-play',
     title: 'How to play',
     notes:
-      "You see one result, then guess how many times as long the next machine takes. 1x is the same, 3x is three times as long. Closest guess wins the most points.",
+      "\"You see one result, then guess how many times as long the next one takes. Closest guess, most points.\"",
+    seconds: 15,
     sources: [POLLS[0].base],
     render: () => <HowToPlay />,
   },
@@ -167,7 +173,8 @@ export const SLIDES: SlideDef[] = [
     title: 'Round: MacBook',
     poll: 'macbook',
     notes:
-      "Base: the laptop on Linux, 22.7 s. The Mac has the faster CPU, about 3.5x. Reveal: one and a half times as long. On the faster chip.",
+      "\"Linux on the laptop: 22.7 seconds. The Mac has a CPU three and a half times faster\u2026\" Reveal: \"One and a half times slower.\"",
+    seconds: 35,
     sources: poll('macbook').sources,
     render: (ctx) => <RoundSlide p={poll('macbook')} ctx={ctx} />,
   },
@@ -176,7 +183,8 @@ export const SLIDES: SlideDef[] = [
     title: 'Round: Spotlight off',
     poll: 'spotlight',
     notes:
-      "Everyone blames Spotlight indexing first. Folders ending in .noindex are skipped. Reveal: no difference. Not Spotlight.",
+      "\"Everyone blames Spotlight. Same Mac, folder Spotlight skips.\" Reveal: \"No difference.\"",
+    seconds: 25,
     sources: poll('spotlight').sources,
     render: (ctx) => <RoundSlide p={poll('spotlight')} ctx={ctx} />,
   },
@@ -185,7 +193,8 @@ export const SLIDES: SlideDef[] = [
     title: 'Round: Windows',
     poll: 'windows',
     notes:
-      "Same laptop, booted into Windows, Defender on as it ships. Reveal: 17 times. Six and a half minutes on identical hardware.",
+      "\"Same laptop, booted into Windows.\" Reveal: \"Seventeen times. Six and a half minutes, identical hardware.\"",
+    seconds: 35,
     sources: poll('windows').sources,
     render: (ctx) => <RoundSlide p={poll('windows')} ctx={ctx} />,
   },
@@ -194,7 +203,8 @@ export const SLIDES: SlideDef[] = [
     title: 'Round: ext4',
     poll: 'ext4',
     notes:
-      "Back to Linux. Fedora's default is btrfs; same laptop with ext4 instead. Reveal: four times faster, only the filesystem changed.",
+      "\"Linux again, but ext4 instead of Fedora's default btrfs.\" Reveal: \"Four times faster. Only the filesystem changed.\"",
+    seconds: 25,
     sources: poll('ext4').sources,
     render: (ctx) => <RoundSlide p={poll('ext4')} ctx={ctx} />,
   },
@@ -202,7 +212,8 @@ export const SLIDES: SlideDef[] = [
     id: 'race',
     title: 'The full race',
     notes:
-      "The recorded runs replayed on one time scale. Linux ext4 is done almost instantly; Windows is still going after six minutes.",
+      "\"All of them on one clock. ext4 is done before you can see it. Windows is still going.\"",
+    seconds: 25,
     sources: RACE,
     render: () => (
       <div className="slide">
@@ -216,7 +227,8 @@ export const SLIDES: SlideDef[] = [
     title: 'Round: delete',
     poll: 'delete',
     notes:
-      "Cleaning up: deleting the 16 worktrees. ext4 takes under 2 seconds. Reveal: the Mac takes 21 times as long, longer than creating them.",
+      "\"Cleaning up. ext4 deletes everything in under two seconds.\" Reveal: \"The Mac: 21 times as long.\"",
+    seconds: 25,
     sources: poll('delete').sources,
     render: (ctx) => <RoundSlide p={poll('delete')} ctx={ctx} />,
   },
@@ -224,14 +236,16 @@ export const SLIDES: SlideDef[] = [
     id: 'leaderboard',
     title: 'Leaderboard',
     notes:
-      "Announce the winner. Then: so why?",
+      "\"And the winner is\u2026 So, why?\"",
+    seconds: 15,
     render: ({ state }) => <Leaderboard state={state} />,
   },
   {
     id: 'syscalls',
     title: 'What an install really is',
     notes:
-      "An install barely moves any data. It's hundreds of thousands of tiny requests to the operating system: create this folder, link this file. One agent: about 200 thousand for the install alone. Sixteen agents at once: millions, all at the same moment. That's why a faster SSD doesn't help: the work is bookkeeping, not data.",
+      "\"An install barely moves any data. It's hundreds of thousands of tiny requests to the operating system: make this folder, link this file. Sixteen agents: millions at once. A faster SSD doesn't help.\"",
+    seconds: 30,
     render: () => (
       <div className="slide">
         <h2>An install is not data. It's paperwork.</h2>
@@ -263,7 +277,8 @@ export const SLIDES: SlideDef[] = [
     id: 'two-problems',
     title: 'Two different problems',
     notes:
-      "Two separate problems. Left to right: how slow is it for ONE agent alone. Bottom to top: how much does running 16 at once help. The dashed line means no help at all: 16 at once take as long as 16 in a row. ext4: cheap and parallel. btrfs: cheap, but agents wait in line. The Mac: every file is expensive. Windows: both.",
+      "\"Two separate problems. Left to right: how slow is one agent alone. Bottom to top: does running sixteen at once help. ext4 is cheap and parallel. btrfs is cheap, but agents wait in line. On the Mac every file is expensive. Windows has both.\"",
+    seconds: 40,
     sources: SCATTER.map((s) => s.id),
     render: () => (
       <div className="slide">
@@ -289,7 +304,8 @@ export const SLIDES: SlideDef[] = [
     id: 'linux-why',
     title: 'Why btrfs looked like the future',
     notes:
-      "For years btrfs was 'the future' and ext4 the old workhorse. In 2008 ext4's own maintainer called ext4 a bridge to btrfs, and Fedora made btrfs the default in 2020. The reason: btrfs never overwrites anything. Every change is written as a new copy, all the way up one big tree. That gives you snapshots for free, checksums that catch a dying disk, compression, instant copies. ext4 just updates its records in place and keeps a journal: boring, none of those features. But 'never overwrite' means every tiny change rewrites its path up the tree, and every agent has to pass through the top of that one tree. With one user that's invisible. With 16 agents, they queue: seven times more waiting.",
+      "\"For years btrfs was 'the future' and ext4 the old workhorse. In 2008 ext4's own maintainer called it a bridge to btrfs, and Fedora made btrfs the default in 2020. The idea: never overwrite anything, write every change as a new copy up one big tree. That gives you free snapshots, checksums that catch a dying disk, compression, instant copies. ext4 just updates its records in place: boring. But 'never overwrite' means every tiny change rewrites its path to the top of that one tree, and every agent has to pass through the top. With one user you never notice. With sixteen agents they queue: seven times more waiting.\"",
+    seconds: 50,
     render: () => (
       <Tradeoff
         headline="Why btrfs looked like the future"
@@ -319,7 +335,8 @@ export const SLIDES: SlideDef[] = [
     id: 'why-macos',
     title: 'Why APFS is built this way',
     notes:
-      "APFS was announced in 2016 to replace HFS+, a filesystem from 1998. It shipped on the iPhone first, iOS 10.3 in 2017, then on every Mac. Apple's own description: optimized for flash storage, with encryption as a primary feature. Like btrfs it never overwrites its records, which buys crash safety without a journal, instant clones, and snapshots for Time Machine and system updates. Every file can be encrypted. Those are great trade-offs for a phone: one person, one app at a time, precious photos. Agents are the opposite: hundreds of threads creating and deleting disposable files. Every create and delete rewrites tree nodes, and the pnpm team measured that it doesn't get faster with more threads. Result: five times slower per file than Linux, on a faster CPU, and nearly all of it inside macOS.",
+      "\"APFS replaced a filesystem from 1998, and it shipped on the iPhone first, in 2017. Apple built it for flash storage, with encryption as a primary feature. Like btrfs it never overwrites its records: that buys crash safety, instant clones, snapshots for Time Machine and system updates. Perfect for a phone: one person, one app, precious photos. Agents are the opposite. Every create and delete rewrites tree nodes, and it doesn't get faster with more threads: five times slower per file than Linux, on a faster CPU.\"",
+    seconds: 45,
     render: () => (
       <Tradeoff
         headline="Why APFS is built this way"
@@ -341,7 +358,8 @@ export const SLIDES: SlideDef[] = [
     id: 'why-windows',
     title: 'Why Windows checks every file',
     notes:
-      "NTFS is from 1993. The slow part isn't really NTFS, it's what Windows put in front of it after twenty years of malware: since Windows 8, every PC ships with Defender, and its real-time protection sits between every program and the disk. When a file is opened, it gets checked first, and the program waits. For a normal user that's invisible and it stops a lot of attacks. A developer opening millions of files pays it millions of times: 27 seconds for one agent, versus 1.4 on Linux on the same laptop. Microsoft knows: Dev Drive, from 2023, is a separate drive for code that's trusted, where files are checked later instead of first. We haven't measured it yet.",
+      "\"On Windows it's not really the filesystem. After twenty years of malware, every Windows since 8 ships with Defender, and it sits in front of the disk: every file is checked when it's opened, and the program waits. Invisible for normal use, it stops a lot of attacks. A developer opening millions of files pays it millions of times. Microsoft knows: Dev Drive, from 2023, checks code folders later instead of first. We haven't measured it yet.\"",
+    seconds: 40,
     render: () => (
       <Tradeoff
         headline="Why Windows checks every file"
@@ -363,7 +381,8 @@ export const SLIDES: SlideDef[] = [
     id: 'different-job',
     title: 'Built for a different job',
     notes:
-      "So the pattern: none of these are bad filesystems. They were built for a different job. They assumed your files are precious, one person does one thing at a time, and files change occasionally. Agents break all three: node_modules is disposable, you can regenerate it in seconds; sixteen agents run around 950 threads at once; and they create and delete millions of tiny files an hour. We're paying for snapshots, checksums, encryption and virus scans on files we delete an hour later.",
+      "\"None of these are bad filesystems. They were built for a different job: files are precious, one person does one thing at a time, files change now and then. Agents break all three. node_modules is disposable, sixteen agents run around 950 threads, and they churn through millions of tiny files. We pay for snapshots, checksums, encryption and virus scans on files we delete an hour later.\"",
+    seconds: 35,
     render: () => (
       <div className="slide">
         <h2>Built for a different job</h2>
@@ -386,7 +405,8 @@ export const SLIDES: SlideDef[] = [
     id: 'takeaways',
     title: 'What to do about it',
     notes:
-      "Run fewer, reuse worktrees, and pick the filesystem on purpose.",
+      "\"More agents isn't free: on btrfs and Windows, sixteen at once take as long as sixteen in a row. Reuse worktrees. On Linux, use ext4 for agent work. On Windows, get off scanned NTFS. On the Mac, keep pnpm's defaults.\"",
+    seconds: 30,
     render: () => (
       <div className="slide">
         <h2>Running many agents? Pick your filesystem on purpose.</h2>
@@ -429,7 +449,8 @@ export const SLIDES: SlideDef[] = [
     id: 'thanks',
     title: 'Thanks',
     notes:
-      "One command on macOS, Linux, Windows and WSL. Data and slides are in the repo. Thanks!",
+      "\"One command, any OS. Thanks!\"",
+    seconds: 10,
     render: () => (
       <div className="slide thanks">
         <BlockText text={'RUN IT\nYOURSELF'} cell={22} />

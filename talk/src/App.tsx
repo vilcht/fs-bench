@@ -11,6 +11,7 @@ import { useRoom } from './useRoom'
 export function App() {
   const path = location.pathname
   if (path.startsWith('/present')) return <Presenter />
+  if (path.startsWith('/notes-draft')) return <NotesDraft />
   if (path.startsWith('/notes')) return <Notes />
   return <Audience />
 }
@@ -170,6 +171,113 @@ function Notes() {
       <p className="notes-text">{slide.notes}</p>
       {slide.poll && <p className="notes-answer">Answer: {answerText(poll(slide.poll))}</p>}
       {next && <p className="notes-next">Next: {next.title}</p>}
+    </div>
+  )
+}
+
+/**
+ * Practice view: slides and script without a key or a live room. Everything is local (position in
+ * localStorage), so it works offline from the live talk. A per-slide timer compares against SCRIPT.md.
+ */
+function NotesDraft() {
+  const saved = Number(localStorage.getItem('fsbench-draft-slide') ?? 0)
+  const [pos, setPos] = useState({ slide: clampSlide(saved), step: 0 })
+  const [started, setStarted] = useState<number | null>(null)
+  const [slideStart, setSlideStart] = useState(() => Date.now())
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 250)
+    return () => clearInterval(t)
+  }, [])
+  useEffect(() => localStorage.setItem('fsbench-draft-slide', String(pos.slide)), [pos.slide])
+
+  const go = useCallback((slide: number, step: number) => {
+    setPos((cur) => {
+      if (cur.slide !== slide) setSlideStart(Date.now())
+      return { slide: clampSlide(slide), step }
+    })
+    setStarted((s) => s ?? Date.now())
+  }, [])
+  const next = useCallback(() => {
+    const cur = SLIDES[pos.slide]
+    if (cur.poll && pos.step === 0) go(pos.slide, 1)
+    else if (pos.slide < SLIDES.length - 1) go(pos.slide + 1, 0)
+  }, [pos, go])
+  const prev = useCallback(() => {
+    if (pos.step > 0) go(pos.slide, 0)
+    else if (pos.slide > 0) go(pos.slide - 1, SLIDES[pos.slide - 1].poll ? 1 : 0)
+  }, [pos, go])
+  const restart = useCallback(() => {
+    setPos({ slide: 0, step: 0 })
+    setStarted(null)
+    setSlideStart(Date.now())
+  }, [])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (['ArrowRight', 'PageDown', ' ', 'Enter'].includes(e.key)) {
+        e.preventDefault()
+        next()
+      } else if (['ArrowLeft', 'PageUp', 'Backspace'].includes(e.key)) {
+        e.preventDefault()
+        prev()
+      } else if (e.key === 'r' || e.key === 'R') restart()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [next, prev, restart])
+
+  const slide = SLIDES[pos.slide]
+  const nextSlide = SLIDES[pos.slide + 1]
+  const p = slide.poll ? poll(slide.poll) : undefined
+  const onSlide = Math.floor((now - slideStart) / 1000)
+  const total = started ? Math.floor((now - started) / 1000) : 0
+  const target = slide.seconds ?? 0
+  const planned = SLIDES.slice(0, pos.slide + 1).reduce((a, s) => a + (s.seconds ?? 0), 0)
+  const plannedAll = SLIDES.reduce((a, s) => a + (s.seconds ?? 0), 0)
+  const clock = (t: number) => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`
+  return (
+    <div className="draft">
+      <div className="draft-top tnum">
+        <span>
+          Practice · {pos.slide + 1}/{SLIDES.length} · {slide.title}
+          {slide.poll && (pos.step === 0 ? ' · voting' : ' · revealed')}
+        </span>
+        <span>
+          <span className={target && onSlide > target ? 'over' : ''}>
+            this slide {clock(onSlide)} / {clock(target)}
+          </span>
+          {' · '}
+          <span className={started && total > planned ? 'over' : ''}>
+            total {clock(total)} / {clock(planned)}
+          </span>
+          {' · '}plan {clock(plannedAll)}
+        </span>
+      </div>
+      <div className="draft-main">
+        <div className="draft-preview">
+          <Stage>
+            <SlideFrame index={pos.slide} ctx={{ step: pos.step, state: null, joinUrl: joinUrl() }} connected />
+          </Stage>
+        </div>
+        <div className="draft-side">
+          <p className="draft-text">{slide.notes}</p>
+          {p && <p className="notes-answer">Answer: {answerText(p)}</p>}
+          {nextSlide && <p className="notes-next">Next: {nextSlide.title}</p>}
+        </div>
+      </div>
+      <div className="draft-controls">
+        <button type="button" onClick={prev} disabled={pos.slide === 0 && pos.step === 0}>
+          ← Back
+        </button>
+        <button type="button" onClick={next} disabled={pos.slide === SLIDES.length - 1}>
+          {slide.poll && pos.step === 0 ? 'Reveal →' : 'Next →'}
+        </button>
+        <button type="button" className="ghost" onClick={restart}>
+          Restart (R)
+        </button>
+        <span className="muted small">No key, no live room: practice only. The timer starts on your first step.</span>
+      </div>
     </div>
   )
 }

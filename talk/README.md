@@ -18,6 +18,12 @@ Presenter keys: `→` / `Space` / `PageDown` next (on a poll slide: first press 
 
 ## Practice
 
+Quickest: open `/notes-draft`. No key, no live room: the slides, what to say, the answers and a timer against
+the planned time per slide. → / Space next (rounds reveal first), ← back, `R` restart. Nothing you do there
+reaches the audience.
+
+To rehearse the real setup:
+
 1. Presenter view on the screen you'll share: `/present?key=…` (arrow keys, `F` fullscreen).
 2. Speaker notes on a second screen: `/notes?key=…` (current slide, what to say, the answer, a timer).
 3. Your phone on `/` to see what the audience sees.
