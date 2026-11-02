@@ -9,9 +9,14 @@ parallel. The benchmark lives in the repo root; the live slide site lives in `ta
   worktree remove, 1/2/4/8/16 agents at once, l2beat pinned at `e91c705232`. Per-agent timings
   (`agents.csv`) and resource samples: CPU busy %, kernel share, RAM, disk (`samples.csv`).
   Linux, macOS, Windows (Git Bash, optional Dev Drive), WSL.
-- **Talk site** (`talk/`, Cloudflare Worker + Durable Object): 18 slides, 5 higher/lower rounds, all on real
-  data (no MOCK badges). Live audience cursors, leaderboard, presenter view (`/present?key=…`), speaker notes
-  (`/notes?key=…`). See `talk/README.md` for running and deploying.
+- **Talk site** (`talk/`, Cloudflare Worker + Durable Object): 22 slides: the game (5 higher/lower rounds and
+  the leaderboard), then a technical "under the hood" section (syscall census, cost-per-file vs queueing,
+  Linux kernel profiles, xfs journal proof, macOS, Windows, myth check). All real data. Live audience cursors,
+  presenter view (`/present?key=…`), speaker notes (`/notes?key=…`). See `talk/README.md`.
+- **Script** (`talk/SCRIPT.md`): full spoken script per slide, with the technical background, a 10-minute cut,
+  glossary, methods and caveats, Theo's claims checked, sources.
+- **Kernel profiles** (`lab/`): bpftrace on-CPU/off-CPU profiles of 16 agents on fresh ext4/xfs/btrfs volumes, plus
+  xfs variants (1 GiB log, no parent pointers) and a strace syscall census of one agent. See `lab/README.md`.
 
 ## The story the deck tells
 
@@ -61,7 +66,8 @@ all 5 rounds, scoring, reconnect) and a headless-browser run through all 18 slid
 
 ## Next steps
 
-1. Rehearse with `/notes?key=…` on a second screen; trim the speaker notes to your own words.
+1. Rehearse from `talk/SCRIPT.md`, with `/notes?key=…` on a second screen. For 10 minutes, skip slides 16, 19, 20.
+   Verify the claims marked as others' measurements (macOS scaling, Defender modes) if someone might push back.
 2. Before the talk, open `/present?key=…` and press `Shift+R` to clear test votes and players.
 3. Optional, for a later version: Dev Drive and WSL2 runs on the laptop (the Dev Drive check needs an admin
    shell: it failed with "access denied"), a full 3-rep Windows run, and the Mac mini.

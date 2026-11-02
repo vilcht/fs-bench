@@ -1,6 +1,6 @@
 # Talk: 16 agents, one SSD
 
-One-off site for the knowledge-sharing session: slides and live voting in one place.
+One-off site for the knowledge-sharing session: slides and live voting in one place. The spoken script, with the technical background for every slide, is in [`SCRIPT.md`](SCRIPT.md).
 The presenter drives the slides; everyone who opens the site follows along, their mouse cursors show up
 live on everyone's slide, and they vote when a round opens.
 

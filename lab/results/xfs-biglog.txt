@@ -1,0 +1,53 @@
+# xfs-biglog
+== prof
+worktree_add 4.55
+install 21.91
+remove 7.94
+meta-data=/dev/loop0             isize=512    agcount=12, agsize=1048576 blks
+naming   =version 2              bsize=4096   ascii-ci=0, ftype=1, parent=1
+log      =internal log           bsize=4096   blocks=262144, version=2
+
+## xfs-biglog worktree_add: on-CPU samples 9042, in kernel 55%
+  kernel time by syscall: ? 56%, openat 23%, mkdir 7%, newfstatat 5%, close 5%, openat2 2%
+  hottest kernel functions (self): _raw_spin_unlock_irqrestore 16%, clear_highpages_kasan_tagged 6%, native_queued_spin_lock_slowpath 5%, _raw_spin_unlock_irq 5%, _raw_spin_lock 2%, __d_lookup_rcu 2%, kmem_cache_alloc_noprof 1%
+  spinning on locks (top-3 frames): 28% of kernel samples
+  fs functions (inclusive): xfs_generic_create 28%, xfs_file_buffered_write 27%, xfs_create 22%, xfs_trans_commit 11%, xlog_cil_commit 9%, xfs_vn_mkdir 7%, xfs_dialloc 5%, xfs_icreate 4%, xfs_buf_get_map 4%
+  off-CPU (non-idle) thread-seconds asleep: 53.6
+  asleep by syscall: ? 99%, close 1%, openat 0%, mkdir 0%, newfstatat 0%, openat2 0%
+      91%  io_schedule_timeout  in  balance_dirty_pages < balance_dirty_pages_ratelimited_flags
+       7%  __down > down  in  ___down_common < xfs_buf_find_lock
+       1%  rwsem_down_read_slowpath > down_read  in  xlog_cil_commit < __xfs_trans_commit
+       0%  preempt_schedule_irq  in  irqentry_exit < asm_sysvec_reschedule_ipi
+       0%  io_schedule > folio_wait_bit_common  in  filemap_fault < __do_fault
+       0%  preempt_schedule > preempt_schedule_thunk  in  _raw_spin_unlock_irq < evict_folios
+       0%  preempt_schedule_irq  in  irqentry_exit < asm_sysvec_apic_timer_interrupt
+
+## xfs-biglog install: on-CPU samples 58528, in kernel 89%
+  kernel time by syscall: linkat 65%, mkdir 14%, ? 10%, symlink 6%, rename 2%, statx 1%
+  hottest kernel functions (self): native_queued_spin_lock_slowpath 67%, _raw_spin_unlock_irqrestore 6%, finish_task_switch.isra.0 4%, __d_lookup_rcu 2%, rwsem_down_write_slowpath 1%, __pi_memcpy 1%, rwsem_spin_on_owner 1%
+  spinning on locks (top-3 frames): 74% of kernel samples
+  fs functions (inclusive): xfs_link 58%, xfs_vn_link 58%, xfs_trans_alloc 50%, xfs_log_reserve 50%, xlog_grant_head_check 50%, xfs_trans_alloc_dir 34%, xfs_trans_commit 32%, xlog_cil_commit 30%, xfs_log_ticket_ungrant 25%
+  off-CPU (non-idle) thread-seconds asleep: 10960.8
+  asleep by syscall: linkat 44%, mkdir 43%, ? 10%, symlink 3%, rename 1%, fsync 0%
+      37%  rwsem_down_write_slowpath > down_write  in  filename_create < filename_mkdirat
+      19%  rwsem_down_write_slowpath > down_write  in  filename_create < filename_linkat
+      16%  xlog_grant_head_wait > xfs_log_reserve  in  xlog_grant_head_check < xfs_link
+      11%  sleep  in  xlog_cil_push_background < __xfs_trans_commit
+       6%  __down > down  in  ___down_common < xfs_buf_find_lock
+       4%  xlog_grant_head_wait > xfs_log_reserve  in  xlog_grant_head_check < xfs_attr_set
+       3%  xlog_grant_head_wait > xfs_log_reserve  in  xlog_grant_head_check < xfs_create
+
+## xfs-biglog remove: on-CPU samples 9403, in kernel 97%
+  kernel time by syscall: unlink 48%, newfstatat 18%, rmdir 12%, ? 11%, getdents64 4%, vfs_unlink 4%
+  hottest kernel functions (self): __d_lookup_rcu 5%, __pi_memcpy 3%, xfs_buf_lookup 3%, _raw_spin_lock 3%, xlog_cil_insert_items 3%, __pi_memset 2%, finish_task_switch.isra.0 2%
+  spinning on locks (top-3 frames): 5% of kernel samples
+  fs functions (inclusive): xfs_remove 53%, xfs_vn_unlink 52%, xfs_trans_commit 42%, xfs_defer_finish_noroll 24%, xlog_cil_commit 24%, xfs_defer_finish_one 12%, xfs_defer_trans_roll 10%, xfs_trans_roll 10%, xfs_dir_remove_child 10%
+  off-CPU (non-idle) thread-seconds asleep: 103.0
+  asleep by syscall: ? 63%, unlink 29%, rmdir 7%, getdents64 0%, vfs_unlink 0%, newfstatat 0%
+      61%  __down > down  in  ___down_common < xfs_buf_find_lock
+      36%  wait_for_completion  in  __flush_work < destroy_inode
+       2%  rwsem_down_read_slowpath > down_read  in  xlog_cil_commit < __xfs_trans_commit
+       1%  wait_for_completion  in  __flush_workqueue < xlog_cil_push_now.isra.0
+       0%  preempt_schedule_irq  in  irqentry_exit < asm_sysvec_reschedule_ipi
+       0%  preempt_schedule_irq  in  irqentry_exit < asm_sysvec_apic_timer_interrupt
+       0%  rwsem_down_write_slowpath > down_write  in  vfs_unlink < filename_unlinkat

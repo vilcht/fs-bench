@@ -341,3 +341,32 @@ input[type='range'] { width: 100%; accent-color: var(--ink); }
 @media (prefers-reduced-motion: reduce) {
   .cursor { transition: none; }
 }
+
+/* Under the hood */
+.calls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; margin: 8px 0 36px; }
+.call-card { background: var(--void); box-shadow: inset 0 0 0 3px var(--axis); padding: 28px 30px; display: flex; flex-direction: column; gap: 18px; }
+.call-card code { font-size: 22px; color: var(--ink-2); }
+.call-total { display: flex; align-items: flex-end; gap: 14px; }
+.call-total small { font-family: var(--mono); font-size: 18px; color: var(--muted); padding-bottom: 6px; }
+.call-card ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 24px; color: var(--ink-2); }
+.call-card li b { font-family: var(--mono); color: var(--ink); margin-right: 8px; }
+.bottlenecks { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 22px; }
+.bottlenecks li { display: grid; grid-template-columns: 170px 1fr 300px; gap: 36px; align-items: center; padding: 24px 0; border-top: 2px solid #262833; }
+.bn-fs { display: flex; align-items: center; gap: 16px; font-size: 38px; font-weight: 820; font-stretch: 110%; }
+.bn-fs i { width: 26px; height: 26px; }
+.bn-what { font-size: 25px; line-height: 1.4; color: var(--ink-2); }
+.bn-what b { display: block; font-size: 31px; color: var(--ink); margin-bottom: 4px; }
+.bn-num { font-family: var(--mono); font-size: 48px; font-weight: 800; text-align: right; }
+.bn-num small { display: block; font-size: 16px; font-weight: 500; color: var(--muted); }
+.myths { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 22px; }
+.myth { display: flex; gap: 26px; align-items: flex-start; }
+.myth-verdict { flex: none; width: 52px; height: 52px; display: grid; place-items: center; font-size: 34px; font-weight: 800; color: var(--void); background: var(--critical, #d03b3b); }
+.myth.partly .myth-verdict { background: #c98500; }
+.myth.yes .myth-verdict { background: #0ca30c; }
+.myth b { display: block; font-size: 31px; color: var(--ink); margin-bottom: 2px; }
+.myth span:last-child { font-size: 25px; line-height: 1.35; color: var(--ink-2); }
+.calls-total { font-size: 36px; line-height: 1.35; color: var(--ink-2); margin: 0; max-width: 40ch; }
+.calls-total b { color: var(--ink); }
+.halo { paint-order: stroke; stroke: var(--void); stroke-width: 7px; stroke-linejoin: round; }
+.bottlenecks + .footnote { margin-top: 18px; }
+.bottlenecks li { padding: 18px 0; }
