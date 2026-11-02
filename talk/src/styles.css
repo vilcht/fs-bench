@@ -406,3 +406,4 @@ input[type='range'] { width: 100%; accent-color: var(--ink); }
 .draft-controls button.ghost { background: transparent; color: var(--ink-2); box-shadow: inset 0 0 0 2px var(--axis); }
 .draft-controls button:disabled { opacity: 0.35; cursor: default; }
 @media (max-width: 900px) { .draft-main { grid-template-columns: 1fr; } }
+.load-note { margin-top: 26px; max-width: none; } .load-note + .footnote { margin-top: 14px; }

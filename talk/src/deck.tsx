@@ -4,6 +4,7 @@ import { METRIC_LABEL, POLLS, type Poll, ZERO_AT, describeRatio, fmtRatio, metri
 import type { RoomState } from '../shared/protocol'
 import { BlockText } from './blocks/BlockText'
 import { SectorField } from './blocks/SectorField'
+import { Bars } from './charts/Bars'
 import { Guesses } from './charts/Guesses'
 import { Race } from './charts/Race'
 import { Scatter } from './charts/Scatter'
@@ -56,6 +57,15 @@ const SCATTER: { id: string; label: string; sub?: string; anchor?: 'right' | 'le
   { id: 'huawei:home-btrfs', label: 'Linux btrfs', sub: 'agents wait in line', anchor: 'below' },
   { id: 'macbook:apfs', label: 'macOS', sub: 'every file is expensive', anchor: 'right' },
   { id: 'huawei-win:ntfs', label: 'Windows', sub: 'both', anchor: 'below-left' },
+]
+
+// lab/machine_load.py: machine-wide CPU while 16 agents create, install and delete (whole computer, incl. the OS
+// and Defender). busyFor = seconds of the whole computer at 100%.
+const LOAD: { id: string; label: string; busyFor: number; wall: number; avg: number; peak: number }[] = [
+  { id: 'huawei:ext4', label: 'Linux ext4', busyFor: 4.5, wall: 6.9, avg: 65, peak: 93 },
+  { id: 'huawei:home-btrfs', label: 'Linux btrfs', busyFor: 13.8, wall: 38, avg: 36, peak: 87 },
+  { id: 'macbook:apfs', label: 'MacBook', busyFor: 52.7, wall: 77.5, avg: 68, peak: 100 },
+  { id: 'huawei-win:ntfs', label: 'Windows', busyFor: 233, wall: 463, avg: 50, peak: 89 },
 ]
 
 const ERAS: [string, string][] = [
@@ -297,6 +307,36 @@ export const SLIDES: SlideDef[] = [
           xFormat={(v) => `${v} s`}
           yFormat={(v) => `${v}×`}
         />
+      </div>
+    ),
+  },
+  {
+    id: 'cpu-load',
+    title: 'Does it slow down your computer?',
+    notes:
+      "\"Does this make your computer sluggish? Yes. While sixteen agents set up and clean up, half to all of your CPU is busy. On the Mac it hits 100%: every core. Add it up and Windows keeps the whole laptop busy for about four minutes, ext4 for four seconds. And three quarters or more of that is the operating system doing file bookkeeping, not pnpm or git.\"",
+    seconds: 35,
+    sources: LOAD.map((l) => l.id),
+    render: () => (
+      <div className="slide">
+        <h2>Does it slow down your computer? Yes.</h2>
+        <h3 className="chart-title">16 agents create, install and delete: the whole computer at 100% for…</h3>
+        <Bars
+          items={LOAD.map((l) => ({
+            id: l.id,
+            label: l.label,
+            sub: `${l.avg}% busy for ${l.wall >= 100 ? `${Math.round(l.wall / 60)} min` : `${Math.round(l.wall)} s`}, peak ${l.peak}%`,
+            value: l.busyFor,
+            color: familyColor(cfg(l.id).family),
+          }))}
+          width={W}
+          labelWidth={330}
+          format={(v) => (v >= 100 ? `${(v / 60).toFixed(1)} min` : `${v.toFixed(v < 10 ? 1 : 0)} s`)}
+        />
+        <p className="calls-total load-note">
+          <b>Three quarters or more of it is the operating system</b> doing file bookkeeping, not pnpm or git.
+        </p>
+        <p className="footnote">Machine-wide CPU from the benchmark's sampler. Windows: warmup run. We measured load, not how laggy the UI felt.</p>
       </div>
     ),
   },

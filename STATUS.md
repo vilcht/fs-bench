@@ -9,14 +9,14 @@ parallel. The benchmark lives in the repo root; the live slide site lives in `ta
   worktree remove, 1/2/4/8/16 agents at once, l2beat pinned at `e91c705232`. Per-agent timings
   (`agents.csv`) and resource samples: CPU busy %, kernel share, RAM, disk (`samples.csv`).
   Linux, macOS, Windows (Git Bash, optional Dev Drive), WSL.
-- **Talk site** (`talk/`, Cloudflare Worker + Durable Object): 19 slides, about 10 minutes: the game (5
+- **Talk site** (`talk/`, Cloudflare Worker + Durable Object): 20 slides, about 10 minutes: the game (5
   higher/lower rounds, race, leaderboard), then the "why": an install is paperwork; two problems (cost per file
-  vs waiting in line); one design trade-off slide each for ext4 vs btrfs, APFS and Windows (built for → gives you
+  vs waiting in line); does it slow down your computer (machine-wide CPU, `lab/machine_load.py`); one design trade-off slide each for ext4 vs btrfs, APFS and Windows (built for → gives you
   → what agents pay); "built for a different job"; takeaways. All real data. The
   deck shows ext4 and Fedora's default btrfs on Linux; xfs and the btrfs test volume are excluded in
   `talk/machines.json` (still in `results/`). Live audience cursors, presenter view (`/present?key=…`), speaker
   notes (`/notes?key=…`). See `talk/README.md`.
-- **Script** (`talk/SCRIPT.md`): what to say per slide with timings (≈ 9 min), answers for likely questions, sources for the history.
+- **Script** (`talk/SCRIPT.md`): what to say per slide with timings (≈ 9:40), answers for likely questions, sources for the history.
 - **Kernel profiles** (`lab/`): bpftrace on-CPU/off-CPU profiles of 16 agents on fresh ext4/xfs/btrfs volumes, plus
   xfs variants (1 GiB log, no parent pointers) and a strace syscall census of one agent. See `lab/README.md`.
 
