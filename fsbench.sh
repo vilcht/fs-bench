@@ -56,7 +56,7 @@ fs_type() {
     winps "(Get-Volume -FilePath '$(cygpath -w "$1")').FileSystemType"
   elif [ "$OS" = Darwin ]; then
     diskutil info "$(df -P "$1" | tail -1 | awk '{print $1}')" |
-      awk -F: '/Type \(Personality\)/ { gsub(/^ +/, "", $2); print $2 }'
+      awk -F: '/Type \(Bundle\)/ { gsub(/^ +/, "", $2); print $2; exit }'
   else
     findmnt -no FSTYPE -T "$1"
   fi
@@ -115,7 +115,7 @@ machine_info() {
     pmset -g batt 2>/dev/null | head -2
     pmset -g 2>/dev/null | grep -i lowpowermode
     diskutil info "$(df -P "$BENCH_DIR" | tail -1 | awk '{print $1}')" |
-      grep -E 'Type \(Personality\)|Device / Media Name|Solid State|Protocol|Encrypted|Case-sensitive'
+      grep -E 'Type \(Bundle\)|File System Personality|Media Name|Solid State|Protocol|FileVault|Encrypted|Case-sensitive'
   else
     echo "cpu: $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2-)"
     echo "cores: $(nproc)"

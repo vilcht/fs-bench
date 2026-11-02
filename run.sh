@@ -114,7 +114,8 @@ main() {
 
   runs=$(cd results && find . -mindepth 1 -maxdepth 1 -type d -newer "$marker" | sed 's|^\./||')
   archive=$HOME/fsbench-results-$LABEL-$(date +%Y%m%d-%H%M).tar.gz
-  tar -czf "$archive" -C results $runs
+  # COPYFILE_DISABLE: macOS tar would otherwise add ._* AppleDouble files next to every file.
+  COPYFILE_DISABLE=1 tar -czf "$archive" -C results $runs
   if [ "${KEEP_DATA:-0}" != 1 ]; then
     for d in $data; do chmod -R u+w "$d" 2>/dev/null || true; rm -rf "$d"; done
   fi
