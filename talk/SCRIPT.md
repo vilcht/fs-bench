@@ -1,7 +1,7 @@
 # Talk script (10 minutes)
 
 19 slides. Times are targets; the rounds are where you can speed up or slow down. The `/notes` view shows the same
-lines next to the slide, and `/notes-draft` lets you practice with them without a key (timer included). The deck's notes and target times are copied from this table, so edit them here and re-sync.
+lines next to the slide, and `/notes-draft` lets you practice with them without a key (timer included). The deck's notes and target times are copied from this table, so edit them here and run `pnpm notes`.
 
 | # | Slide | Time | Say |
 |---|---|---|---|
