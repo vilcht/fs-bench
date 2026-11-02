@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { Fragment, type ReactNode } from 'react'
 import { type Config, cfg, configs, setupTime } from '../shared/data'
 import { METRIC_LABEL, POLLS, type Poll, ZERO_AT, describeRatio, fmtRatio, metricValue, poll } from '../shared/polls'
 import type { RoomState } from '../shared/protocol'
@@ -56,22 +56,10 @@ const SCATTER: { id: string; label: string; sub?: string; anchor?: 'right' | 'le
   { id: 'huawei-win:ntfs', label: 'Windows', sub: 'both', anchor: 'below-left' },
 ]
 
-// bpftrace profiles, 16 agents (lab/results/{ext4,btrfs}.txt): non-idle sleep during install, thread-seconds.
-const BOTTLENECKS = [
-  {
-    fs: 'ext4',
-    title: 'Updates in place, journals in batches',
-    text: 'Agents mostly just wait for the folder they are writing into.',
-    num: '1×',
-    numSub: 'time spent waiting',
-  },
-  {
-    fs: 'btrfs',
-    title: 'Never overwrites: copies up one big tree',
-    text: 'Every change goes through the top of the same tree, so all agents queue there.',
-    num: '7×',
-    numSub: 'time spent waiting',
-  },
+const ERAS: [string, string][] = [
+  ['Files are precious: protect every one', 'node_modules is disposable: regenerated in seconds'],
+  ['One person, one task at a time', '16 agents, ~950 threads at once'],
+  ['Files change now and then', 'Millions of tiny files created and deleted per hour'],
 ]
 
 export const SLIDES: SlideDef[] = [
@@ -299,66 +287,99 @@ export const SLIDES: SlideDef[] = [
   },
   {
     id: 'linux-why',
-    title: 'Linux: ext4 vs btrfs',
+    title: 'Why btrfs looked like the future',
     notes:
-      "Same laptop, same requests, so why is ext4 four times faster? It's how each one keeps its records. ext4 updates its records in place and writes its journal in big batches; agents only wait for the folder they're writing into. btrfs never overwrites anything: every change is written as a copy, all the way up one big tree. Every agent has to go through the top of that tree, so they queue. We measured it: btrfs agents spent seven times as long waiting.",
+      "For years btrfs was 'the future' and ext4 the old workhorse. In 2008 ext4's own maintainer called ext4 a bridge to btrfs, and Fedora made btrfs the default in 2020. The reason: btrfs never overwrites anything. Every change is written as a new copy, all the way up one big tree. That gives you snapshots for free, checksums that catch a dying disk, compression, instant copies. ext4 just updates its records in place and keeps a journal: boring, none of those features. But 'never overwrite' means every tiny change rewrites its path up the tree, and every agent has to pass through the top of that one tree. With one user that's invisible. With 16 agents, they queue: seven times more waiting.",
     render: () => (
-      <div className="slide">
-        <h2>Same requests, different bookkeeping</h2>
-        <ul className="bottlenecks">
-          {BOTTLENECKS.map((b) => (
-            <li key={b.fs}>
-              <span className="bn-fs">
-                <i style={{ background: familyColor(b.fs) }} />
-                {b.fs}
-              </span>
-              <span className="bn-what">
-                <b>{b.title}</b>
-                {b.text}
-              </span>
-              <span className="bn-num">
-                {b.num}
-                <small>{b.numSub}</small>
-              </span>
-            </li>
-          ))}
-        </ul>
-        <p className="footnote">Measured by profiling the Linux kernel during the runs (bpftrace). Details in lab/ in the repo.</p>
-      </div>
+      <Tradeoff
+        headline="Why btrfs looked like the future"
+        rows={[
+          {
+            fs: 'ext4',
+            family: 'ext4',
+            era: '1993 → 2008',
+            built: ['Update records in place', 'Journal for crash safety'],
+            gives: ['Simple, predictable', 'No snapshots, no data checksums'],
+            costs: ['Agents mostly wait just for their own folder', '1× waiting'],
+          },
+          {
+            fs: 'btrfs',
+            family: 'btrfs',
+            era: '2007 → Fedora default 2020',
+            built: ['Never overwrite: copy every change up one big tree'],
+            gives: ['Free snapshots', 'Checksums catch a dying disk', 'Compression, instant copies'],
+            costs: ['Every tiny change rewrites its path to the top', 'All agents queue at the root: 7× waiting'],
+          },
+        ]}
+        footnote="In 2008, ext4's maintainer described ext4 as a bridge to btrfs. Waiting: kernel profiles of 16 agents (lab/)."
+      />
     ),
   },
   {
     id: 'why-macos',
-    title: 'Why: macOS',
+    title: 'Why APFS is built this way',
     notes:
-      "On the Mac, every single file costs more: one agent alone is five times slower than Linux, on a faster CPU. Nearly all that time is inside the operating system, not in pnpm or git. APFS never overwrites its records either, and the pnpm team measured that it doesn't get faster with more threads. Spotlight wasn't it.",
+      "APFS was announced in 2016 to replace HFS+, a filesystem from 1998. It shipped on the iPhone first, iOS 10.3 in 2017, then on every Mac. Apple's own description: optimized for flash storage, with encryption as a primary feature. Like btrfs it never overwrites its records, which buys crash safety without a journal, instant clones, and snapshots for Time Machine and system updates. Every file can be encrypted. Those are great trade-offs for a phone: one person, one app at a time, precious photos. Agents are the opposite: hundreds of threads creating and deleting disposable files. Every create and delete rewrites tree nodes, and the pnpm team measured that it doesn't get faster with more threads. Result: five times slower per file than Linux, on a faster CPU, and nearly all of it inside macOS.",
     render: () => (
-      <Why
-        family="apfs"
-        headline="macOS: every file costs more"
-        causes={[
-          ['5× slower, on a faster CPU', 'One agent alone: 4.5 s on the Mac, 0.9 s on Linux ext4.'],
-          ['The time is inside macOS', '86% of install time and 99% of delete time is the operating system, not pnpm or git.'],
-          ['Not Spotlight', 'Hiding the folder from Spotlight changed nothing.'],
+      <Tradeoff
+        headline="Why APFS is built this way"
+        rows={[
+          {
+            fs: 'APFS',
+            family: 'apfs',
+            era: '2016, iPhone first',
+            built: ['Flash storage, encryption first', 'Never overwrite records (copy-on-write)'],
+            gives: ['Crash safety without a journal', 'Instant clones and snapshots', 'Per-file encryption'],
+            costs: ['Every create and delete rewrites tree nodes', "Doesn't speed up with more threads", '5× slower per file, 86–99% inside macOS'],
+          },
         ]}
+        footnote="Apple, WWDC 2016: 'optimized for Flash/SSD storage, engineered with encryption as a primary feature'. Thread scaling: pnpm team's measurements."
       />
     ),
   },
   {
     id: 'why-windows',
-    title: 'Why: Windows',
+    title: 'Why Windows checks every file',
     notes:
-      "Windows is slow even with one agent: 27 seconds versus 1.4 on Linux, same laptop. The main toll is Defender: it checks every file the moment it's opened, before the program can continue. Microsoft's own Dev Drive changes that to check afterwards. We haven't measured Dev Drive yet.",
+      "NTFS is from 1993. The slow part isn't really NTFS, it's what Windows put in front of it after twenty years of malware: since Windows 8, every PC ships with Defender, and its real-time protection sits between every program and the disk. When a file is opened, it gets checked first, and the program waits. For a normal user that's invisible and it stops a lot of attacks. A developer opening millions of files pays it millions of times: 27 seconds for one agent, versus 1.4 on Linux on the same laptop. Microsoft knows: Dev Drive, from 2023, is a separate drive for code that's trusted, where files are checked later instead of first. We haven't measured it yet.",
     render: () => (
-      <Why
-        family="ntfs"
-        headline="Windows: a toll on every file"
-        causes={[
-          ['Slow even alone', 'One agent: 27 s on Windows, 1.4 s on Linux, same laptop.'],
-          ['Every file gets checked', 'Defender scans each file when it is opened, and the program waits for it.'],
-          ['Dev Drive: check later', "Microsoft's fix scans after the fact. Not measured here yet."],
+      <Tradeoff
+        headline="Why Windows checks every file"
+        rows={[
+          {
+            fs: 'NTFS + Defender',
+            family: 'ntfs',
+            era: '1993 + the malware era',
+            built: ['Antivirus in every Windows (since 8)', 'A filter in front of the disk'],
+            gives: ['Every file checked before a program uses it', 'Safe by default, no setup'],
+            costs: ['Every open waits for a scan', 'One agent alone: 27 s vs 1.4 s on Linux', 'Dev Drive (2023): check later instead'],
+          },
         ]}
+        footnote="Same laptop, same SSD. Defender real-time protection on, as shipped. Dev Drive not measured yet."
       />
+    ),
+  },
+  {
+    id: 'different-job',
+    title: 'Built for a different job',
+    notes:
+      "So the pattern: none of these are bad filesystems. They were built for a different job. They assumed your files are precious, one person does one thing at a time, and files change occasionally. Agents break all three: node_modules is disposable, you can regenerate it in seconds; sixteen agents run around 950 threads at once; and they create and delete millions of tiny files an hour. We're paying for snapshots, checksums, encryption and virus scans on files we delete an hour later.",
+    render: () => (
+      <div className="slide">
+        <h2>Built for a different job</h2>
+        <ul className="eras">
+          {ERAS.map(([then, now]) => (
+            <li key={then}>
+              <span className="era-then">{then}</span>
+              <span className="era-arrow">→</span>
+              <span className="era-now">{now}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="calls-total">
+          We pay for <b>snapshots, checksums, encryption and virus scans</b> on files we delete an hour later.
+        </p>
+      </div>
     ),
   },
   {
@@ -418,6 +439,49 @@ export const SLIDES: SlideDef[] = [
     ),
   },
 ]
+
+interface TradeoffRow {
+  fs: string
+  family: string
+  era: string
+  built: string[]
+  gives: string[]
+  costs: string[]
+}
+
+/** Design → benefit → what agents pay, one row per filesystem. */
+function Tradeoff({ headline, rows, footnote }: { headline: string; rows: TradeoffRow[]; footnote?: string }) {
+  return (
+    <div className={rows.length === 1 ? 'slide tradeoff single' : 'slide tradeoff'}>
+      <h2>{headline}</h2>
+      <div className="to-grid">
+        <span />
+        <span className="to-head">Built for</span>
+        <span className="to-head">Gives you</span>
+        <span className="to-head to-cost">What agents pay</span>
+        {rows.map((r) => (
+          <Fragment key={r.fs}>
+            <span className="to-fs">
+              <span>
+                <i style={{ background: familyColor(r.family) }} />
+                {r.fs}
+              </span>
+              <small>{r.era}</small>
+            </span>
+            {[r.built, r.gives, r.costs].map((items, k) => (
+              <ul key={k} className={k === 2 ? 'to-cell to-cost' : 'to-cell'}>
+                {items.map((t) => (
+                  <li key={t}>{t}</li>
+                ))}
+              </ul>
+            ))}
+          </Fragment>
+        ))}
+      </div>
+      {footnote && <p className="footnote">{footnote}</p>}
+    </div>
+  )
+}
 
 function Why({ family, headline, causes }: { family: string; headline: string; causes: [string, string][] }) {
   return (
