@@ -1,0 +1,18 @@
+label: ntfs
+bench_dir: /c/Users/dawid/fsbench-data/home
+fs: NTFS
+scanner: defender-on
+commit: e91c7052327199d7bef160c7f1ef731760c2bc35
+node: v22.22.3  pnpm: 12.3.4  git version 2.53.0.windows.2
+uname: MINGW64_NT-10.0-26200 vilcht 3.6.6-1cdd4371.x86_64 2026-01-15 22:20 UTC x86_64 Msys
+cpu: Intel(R) Core(TM) Ultra 5 125H
+cores: 18
+mem_bytes: 16670388224
+windows: Microsoft Windows 11 Home build 26200
+volume: C: NTFS
+dev_drive: Failed to open the volume. Error 5: Odmowa dost�pu.
+defender_realtime: True
+bitlocker:
+disk: WD PC SN740 SDDPNQD-512G-1127 SSD NVMe
+power: Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Zr�wnowa�ony)
+ac_online: True
