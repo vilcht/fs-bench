@@ -49,6 +49,16 @@ the laptop's Linux-vs-Windows comparison on identical hardware is the fairer one
 - The Windows run used the label `ntfs`; `machines.json` maps it to `huawei-win`. Future Windows runs should use
   `LABEL=intel-core-ultra-5-125h-windows` (also mapped) or a new entry.
 
+## Deployed
+
+https://fs-bench-talk.terenoewt.workers.dev, deployed 2026-11-02 from the `talk-real-data` branch. The presenter
+key is a Worker secret (`PRESENTER_KEY`); the local copy is in `~/.config/fs-bench-talk/presenter-key` on the
+laptop. After changing slides or data: `cd talk && pnpm data && pnpm run deploy`.
+
+Tested on the live site: a WebSocket protocol test (presenter + 6 bots: wrong key, closed/out-of-range votes,
+all 5 rounds, scoring, reconnect) and a headless-browser run through all 18 slides with a phone audience and
+8 bots. The room was reset afterwards (0 players).
+
 ## Next steps
 
 1. Rehearse with `/notes?key=…` on a second screen; trim the speaker notes to your own words.

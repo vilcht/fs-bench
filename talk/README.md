@@ -40,7 +40,9 @@ pnpm dev    # http://localhost:5173, presenter at /present?key=dev
 ```sh
 pnpm exec wrangler login
 pnpm exec wrangler secret put PRESENTER_KEY
-pnpm deploy
+pnpm run deploy   # not `pnpm deploy`: that's pnpm's own built-in command
 ```
+
+Live at https://fs-bench-talk.terenoewt.workers.dev (presenter: `/present?key=…`, notes: `/notes?key=…`).
 
 Live state (slide, votes, players) lives in one Durable Object. Press `Shift+R` before the talk to clear test votes.
